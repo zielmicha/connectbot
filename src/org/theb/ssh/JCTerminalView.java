@@ -2,12 +2,14 @@ package org.theb.ssh;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.Paint.FontMetricsInt;
 import android.util.Log;
@@ -18,7 +20,7 @@ import com.jcraft.jcterm.EmulatorVT100;
 import com.jcraft.jcterm.Term;
 import com.trilead.ssh2.Session;
 
-public class TerminalView extends View implements Term {
+public class JCTerminalView extends View implements Term {
 	private final Paint mPaint;
 	Bitmap mBitmap;
 	Canvas mCanvas;
@@ -54,13 +56,11 @@ public class TerminalView extends View implements Term {
 	
 	private Session session;
 
-	public TerminalView(Context c) {
+	public JCTerminalView(Context c) {
 		super(c);
 		mPaint = new Paint();
 		mPaint.setAntiAlias(mAntialias);
-		mPaint.setARGB(255, 255, 255, 255);
-		
-		mCanvas = new Canvas();
+		mPaint.setColor(mDefaultForeground);
 		
 		setFont(Typeface.MONOSPACE);
 	}
@@ -73,6 +73,7 @@ public class TerminalView extends View implements Term {
 	
 	@Override
 	protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+		Log.d("SSH/TerminalView", "onSizeChanged called");
 		Bitmap newBitmap = Bitmap.createBitmap(w, h, false);
 		Canvas newCanvas = new Canvas();
 		
@@ -104,6 +105,7 @@ public class TerminalView extends View implements Term {
 
 	private void setFont(Typeface typeface) {
 		mPaint.setTypeface(typeface);
+		mPaint.setTextSize(8);
 		FontMetricsInt fm = mPaint.getFontMetricsInt();
 		mDescent = fm.descent;
 		
@@ -150,17 +152,24 @@ public class TerminalView extends View implements Term {
 	}
 
 	public void drawBytes(byte[] buf, int s, int len, int x, int y) {
-		drawString(buf.toString(), x, y);
+		String chars = null;
+		try {
+			chars = new String(buf, "ASCII");
+			drawString(chars.substring(s, s+len), x, y);
+		} catch (UnsupportedEncodingException e) {
+			// TODO Auto-generated catch block
+			Log.e("SSH", "Can't convert bytes to ASCII");
+		}
 	}
 
 	public void drawString(String str, int x, int y) {
-		mCanvas.drawText(str, x, y, mPaint);
+		// Log.d("SSH", "at (" + x + "," + y + ") drawing string: " + str);
+		mCanvas.drawText(str, x, y - mDescent, mPaint);
 		if (mBold)
-			mCanvas.drawText(str, x + 1, y, mPaint);
+			mCanvas.drawText(str, x + 1, y - mDescent, mPaint);
 		
-		if (mUnderline) {
-			mCanvas.drawLine(x, y-1, x+str.length()*mCharWidth, y-1, mPaint);
-		}
+		if (mUnderline)
+			mCanvas.drawLine(x, y - 1, x + str.length() * mCharWidth, y - 1, mPaint);
 	}
 
 	public void draw_cursor() {
@@ -199,8 +208,8 @@ public class TerminalView extends View implements Term {
 	}
 
 	public void redraw(int x, int y, int width, int height) {
-		// TODO I don't think we need to repaint. Look into it.
-		
+		// invalidate(x, y, x+width, y+height);
+		postInvalidate();
 	}
 
 	public void resetAllAttributes() {
@@ -216,8 +225,8 @@ public class TerminalView extends View implements Term {
 	}
 
 	public void scroll_area(int x, int y, int w, int h, int dx, int dy) {
-		// TODO: finish scrolling
-
+		// TODO: make scrolling more efficient (memory-wise)
+		mCanvas.drawBitmap(Bitmap.createBitmap(mBitmap, x, y, w, h), x+dx, y+dy, mPaint);
 	}
 
 	private int toColor(Object o) {
@@ -241,6 +250,7 @@ public class TerminalView extends View implements Term {
 	}
 
 	public void setCursor(int x, int y) {
+		//Log.d("SSH/setCursor", "Cursor placed at (" + x + ", " + y + ")");
 		this.x = x;
 		this.y = y;
 	}

@@ -37,6 +37,9 @@ public class SecureShell extends Activity {
 	private static final int USERNAME_INDEX = 2;
 	private static final int PORT_INDEX = 3;
 	
+	// We change the meta state when the user presses the center button.
+	private boolean mMetaState = false;
+	
 	private static final String[] PROJECTION = new String[] {
 		HostDb.Hosts._ID, // 0
 		HostDb.Hosts.HOSTNAME, // 1
@@ -47,7 +50,7 @@ public class SecureShell extends Activity {
 	private Cursor mCursor;
 	
 	// Terminal window
-	private TerminalView mTerminal;
+	private JCTerminalView mTerminal;
 	
 	// Store the username, hostname, and port from the database.
 	private String mHostname;
@@ -87,10 +90,6 @@ public class SecureShell extends Activity {
 		String hostname;
 		String username;
 		int port;
-		
-		char[][] lines;
-		int posy = 0;
-		int posx = 0;
 		
 		public ConnectionThread(String hostname, String username, int port) {
 			this.hostname = hostname;
@@ -160,8 +159,8 @@ public class SecureShell extends Activity {
 		        x = mTerminal.getColumnCount();
 		        Log.d("SSH", "Requesting PTY of size " + x + "x" + y);
 		        
-				sess.requestPTY("dumb", x, y, 0, 0, null);
-				
+				sess.requestPTY("vt100", x, y, mTerminal.getWidth(), mTerminal.getHeight(), null);
+
 				Log.d("SSH", "Requesting shell...");
 				sess.startShell();
 
@@ -181,111 +180,6 @@ public class SecureShell extends Activity {
 			}
 			
 			mTerminal.start(sess);
-/*		
-			byte[] buff = new byte[8192];
-			lines = new char[y][];
-			
-			try {
-				while (true) {
-					if ((stdin.available() == 0) && (stderr.available() == 0)) {
-						int conditions = sess.waitForCondition(
-								ChannelCondition.STDOUT_DATA
-								| ChannelCondition.STDERR_DATA
-								| ChannelCondition.EOF, 2000);
-						if ((conditions & ChannelCondition.TIMEOUT) != 0)
-							continue;
-						if ((conditions & ChannelCondition.EOF) != 0)
-							if ((conditions &
-									(ChannelCondition.STDERR_DATA
-											| ChannelCondition.STDOUT_DATA)) == 0)
-								break;
-					}
-					
-					if (stdin.available() > 0) {
-						int len = stdin.read(buff);
-						addText(buff, len);
-					}
-					if (stderr.available() > 0) {
-						int len = stderr.read(buff);
-						addText(buff, len);
-					}
-				}
-			} catch (Exception e) {
-				Log.e("SSH", "Got exception reading: " + e.getMessage());
-			}
-			*/
-		}
-		
-		public void addText(byte[] data, int len) {
-			for (int i = 0; i < len; i++) {
-				char c = (char) (data[i] & 0xff);
-			
-				if (c == 8) { // Backspace, VERASE
-					if (posx < 0)
-						continue;
-					posx--;
-					continue;
-				}
-				if (c == '\r') {
-					posx = 0;
-					continue;
-				}
-
-				if (c == '\n') {
-					posy++;
-					if (posy >= y) {
-						for (int k = 1; k < y; k++)
-							lines[k - 1] = lines[k];
-						
-						posy--;
-						lines[y - 1] = new char[x];
-						
-						for (int k = 0; k < x; k++)
-							lines[y - 1][k] = ' ';
-					}
-					continue;
-				}
-
-				if (c < 32) {
-					continue;
-				}
-
-				if (posx >= x) {
-					posx = 0;
-					posy++;
-					if (posy >= y) {
-						posy--;
-						
-						for (int k = 1; k < y; k++)
-							lines[k - 1] = lines[k];
-						lines[y - 1] = new char[x];
-						for (int k = 0; k < x; k++)
-							lines[y - 1][k] = ' ';
-					}
-				}
-
-				if (lines[posy] == null) {
-					lines[posy] = new char[x];
-					for (int k = 0; k < x; k++)
-						lines[posy][k] = ' ';
-				}
-
-				lines[posy][posx] = c;
-				posx++;
-			}
-			
-			StringBuffer sb = new StringBuffer(x * y);
-			
-			for (int i = 0; i < lines.length; i++) {
-				if (i != 0)
-					sb.append('\n');
-				
-				if (lines[i] != null)
-					sb.append(lines[i]);
-			}
-			
-			mBuffer = sb.toString();
-			mHandler.post(mUpdateView);
 		}
 	}
 	
@@ -294,7 +188,7 @@ public class SecureShell extends Activity {
         super.onCreate(savedValues);
         
         requestWindowFeature(Window.FEATURE_PROGRESS);
-        mTerminal = new TerminalView(this);
+        mTerminal = new JCTerminalView(this);
         setContentView(mTerminal);
         //mOutput = (TextView) findViewById(R.id.output);
         
@@ -388,16 +282,49 @@ public class SecureShell extends Activity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent msg) {
     	if (stdout != null) {
-	    	int c = mKMap.get(keyCode, msg.getMetaState());
 	    	try {
-				stdout.write(c);
+	    		if (mKMap.isPrintingKey(keyCode)
+	    				|| keyCode == KeyEvent.KEYCODE_SPACE) {
+			    	int c = mKMap.get(keyCode, msg.getMetaState());
+			    	if (mMetaState) {
+			    		// Support CTRL-A through CTRL-Z
+			    		if (c >= 0x61 && c <= 0x79)
+			    			c -= 0x60;
+			    		else if (c >= 0x40 && c <= 0x59)
+			    			c -= 0x39;
+			    		mMetaState = false;
+			    	}
+					stdout.write(c);
+	    		} else	if (keyCode == KeyEvent.KEYCODE_DEL) {
+					stdout.write(0x08); // CTRL-H
+	    		} else if (keyCode == KeyEvent.KEYCODE_NEWLINE) {
+	    			byte buf[] = mTerminal.emulator.getCodeENTER();
+	    			stdout.write(buf);
+	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+	    			stdout.write(mTerminal.emulator.getCodeLEFT());
+	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+	    			stdout.write(mTerminal.emulator.getCodeUP());
+	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+	    			stdout.write(mTerminal.emulator.getCodeDOWN());
+	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+	    			stdout.write(mTerminal.emulator.getCodeRIGHT());
+	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
+	    			if (mMetaState) {
+	    				stdout.write(0x1B); // ESCAPE
+	    				mMetaState = false;
+	    			} else {
+	    				mMetaState = true;
+	    			}
+	    		} else {
+	    			// This is not something we handle.
+	    			return super.onKeyDown(keyCode, msg);
+	    		}
+				return true;
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				Log.e("SSH", "Can't write to stdout: "+ e.getMessage());
 			}
     	}
-    	
-    	return super.onKeyDown(keyCode, msg);
+		return super.onKeyDown(keyCode, msg);
     }
     
     public void updateViewInUI() {
@@ -406,6 +333,9 @@ public class SecureShell extends Activity {
 
     final Runnable mDisconnectAlert = new Runnable() {
     	public void run() {
+    		if (SecureShell.this == null)
+    			return;
+    		
 			AlertDialog d = AlertDialog.show(SecureShell.this,
 					"Connection Lost", mDisconnectReason, "Ok", false);
 			d.show();
