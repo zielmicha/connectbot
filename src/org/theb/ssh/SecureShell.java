@@ -50,7 +50,7 @@ public class SecureShell extends Activity {
 	private Cursor mCursor;
 	
 	// Terminal window
-	private JCTerminalView mTerminal;
+	private TerminalView mTerminal;
 	
 	// Store the username, hostname, and port from the database.
 	private String mHostname;
@@ -297,17 +297,14 @@ public class SecureShell extends Activity {
 					stdout.write(c);
 	    		} else	if (keyCode == KeyEvent.KEYCODE_DEL) {
 					stdout.write(0x08); // CTRL-H
-	    		} else if (keyCode == KeyEvent.KEYCODE_NEWLINE) {
-	    			byte buf[] = mTerminal.emulator.getCodeENTER();
-	    			stdout.write(buf);
-	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-	    			stdout.write(mTerminal.emulator.getCodeLEFT());
-	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-	    			stdout.write(mTerminal.emulator.getCodeUP());
-	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-	    			stdout.write(mTerminal.emulator.getCodeDOWN());
-	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-	    			stdout.write(mTerminal.emulator.getCodeRIGHT());
+	    		} else if (keyCode == KeyEvent.KEYCODE_NEWLINE
+	    				|| keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+	    				|| keyCode == KeyEvent.KEYCODE_DPAD_UP
+	    				|| keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+	    				|| keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+	    			byte[] output = mTerminal.getKeyCode(keyCode);
+	    			if (output != null)
+	    				stdout.write(output);
 	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
 	    			if (mMetaState) {
 	    				stdout.write(0x1B); // ESCAPE

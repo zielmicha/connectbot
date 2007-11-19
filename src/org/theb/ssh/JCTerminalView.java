@@ -13,6 +13,7 @@ import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.Paint.FontMetricsInt;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.View;
 
 import com.jcraft.jcterm.Emulator;
@@ -20,14 +21,14 @@ import com.jcraft.jcterm.EmulatorVT100;
 import com.jcraft.jcterm.Term;
 import com.trilead.ssh2.Session;
 
-public class JCTerminalView extends View implements Term {
+public class JCTerminalView extends TerminalView implements Term {
 	private final Paint mPaint;
 	Bitmap mBitmap;
 	Canvas mCanvas;
 	
-	OutputStream out;
-	InputStream in;
-	Emulator emulator = null;
+	private OutputStream out;
+	private InputStream in;
+	private Emulator emulator = null;
 	
 	private boolean mBold = false;
 	private boolean mUnderline = false;
@@ -277,6 +278,12 @@ public class JCTerminalView extends View implements Term {
 		mUnderline = true;
 	}
 
+	public void start(Object session) {
+		if (session instanceof Session) {
+			start((Session)session);
+		}
+	}
+	
 	public void start(Session session) {
 		this.session = session;
 		in = session.getStdout();
@@ -289,4 +296,29 @@ public class JCTerminalView extends View implements Term {
 		clear();
 	}
 
+	@Override
+	public InputStream getInput() {
+		return in;
+	}
+
+	@Override
+	public OutputStream getOutput() {
+		return out;
+	}
+
+	@Override
+	public byte[] getKeyCode(int keyCode) {
+		if (keyCode == KeyEvent.KEYCODE_NEWLINE)
+			return emulator.getCodeENTER();
+		else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT)
+			return emulator.getCodeLEFT();
+		else if (keyCode == KeyEvent.KEYCODE_DPAD_UP)
+			return emulator.getCodeUP();
+		else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+			return emulator.getCodeDOWN();
+		else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+			return emulator.getCodeRIGHT();
+		else
+			return null;
+	}
 }
