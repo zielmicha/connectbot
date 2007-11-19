@@ -46,6 +46,9 @@ public class SecureShell extends Activity {
 	
 	private Cursor mCursor;
 	
+	// Terminal window
+	private TerminalView mTerminal;
+	
 	// Store the username, hostname, and port from the database.
 	private String mHostname;
 	private String mUsername;
@@ -153,9 +156,8 @@ public class SecureShell extends Activity {
 				
 				sess = conn.openSession();
 				
-		        y = (int)(mOutput.getHeight() / mOutput.getLineHeight());
-		        // TODO: figure out how to get the width of monospace font characters.
-		        x = y * 3;
+		        y = mTerminal.getRowCount();
+		        x = mTerminal.getColumnCount();
 		        Log.d("SSH", "Requesting PTY of size " + x + "x" + y);
 		        
 				sess.requestPTY("dumb", x, y, 0, 0, null);
@@ -178,6 +180,8 @@ public class SecureShell extends Activity {
 				return;
 			}
 			
+			mTerminal.start(sess);
+/*		
 			byte[] buff = new byte[8192];
 			lines = new char[y][];
 			
@@ -209,6 +213,7 @@ public class SecureShell extends Activity {
 			} catch (Exception e) {
 				Log.e("SSH", "Got exception reading: " + e.getMessage());
 			}
+			*/
 		}
 		
 		public void addText(byte[] data, int len) {
@@ -289,8 +294,9 @@ public class SecureShell extends Activity {
         super.onCreate(savedValues);
         
         requestWindowFeature(Window.FEATURE_PROGRESS);
-        setContentView(R.layout.secure_shell);
-        mOutput  = (TextView) findViewById(R.id.output);
+        mTerminal = new TerminalView(this);
+        setContentView(mTerminal);
+        //mOutput = (TextView) findViewById(R.id.output);
         
         Log.d("SSH", "using URI " + getIntent().getData().toString());
         
