@@ -3,9 +3,6 @@ package org.theb.ssh;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import android.content.Context;
-import android.view.View;
-
 public interface Terminal {
 	public int getWidth();
 	public int getHeight();
