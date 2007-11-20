@@ -26,8 +26,6 @@ public interface Terminal {
 	public int getHeight();
 	public int getRowCount();
 	public int getColumnCount();
-	public void start(Object session);
-	public InputStream getInput();
-	public OutputStream getOutput();
-	public byte[] getKeyCode(int keyCode);
+	public void start(InputStream in, OutputStream out);
+	public byte[] getKeyCode(int keyCode, int meta);
 }

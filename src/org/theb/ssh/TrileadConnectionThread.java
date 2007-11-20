@@ -23,10 +23,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.Semaphore;
 
-import android.app.AlertDialog;
-import android.content.Context;
-import android.util.Log;
-
 import com.trilead.ssh2.Connection;
 import com.trilead.ssh2.ConnectionMonitor;
 import com.trilead.ssh2.Session;
@@ -48,8 +44,6 @@ public class TrileadConnectionThread extends ConnectionThread {
 	protected FeedbackUI ui;
 	protected Terminal term;
 	
-	private String disconnectReason;
-
 	public TrileadConnectionThread(FeedbackUI ui, Terminal term, String hostname, String username, int port) {
 		super(ui, hostname, username, port);
 		this.ui = ui;
@@ -86,18 +80,14 @@ public class TrileadConnectionThread extends ConnectionThread {
 	public void run() {
 		connection = new Connection(hostname, port);
 
-		connection.addConnectionMonitor(mConnectionMonitor);
+		connection.addConnectionMonitor((ConnectionMonitor) ui);
 
 		ui.setWaiting(true, "Connection", "Connecting to " + hostname + "...");
-
-		Log.d("SSH", "Starting connection attempt...");
 
 		try {
 			connection.connect(new InteractiveHostKeyVerifier());
 
 			ui.setWaiting(true, "Authenticating", "Trying to authenticate...");
-
-			Log.d("SSH", "Starting authentication...");
 
 			// boolean enableKeyboardInteractive = true;
 			// boolean enableDSA = true;
@@ -110,7 +100,6 @@ public class TrileadConnectionThread extends ConnectionThread {
 				 */
 
 				if (connection.isAuthMethodAvailable(username, "password")) {
-					Log.d("SSH", "Trying password authentication...");
 					ui.setWaiting(true, "Authenticating",
 							"Trying to authenticate using password...");
 
@@ -137,18 +126,15 @@ public class TrileadConnectionThread extends ConnectionThread {
 						"No supported authentication methods available.");
 			}
 
-			Log.d("SSH", "Opening session...");
 			ui.setWaiting(true, "Session", "Requesting shell...");
 
 			session = connection.openSession();
+			
+			session.requestPTY("vt100",
+					term.getColumnCount(), term.getRowCount(),
+					term.getWidth(), term.getHeight(),
+					null);
 
-			int y = term.getRowCount();
-			int x = term.getColumnCount();
-			Log.d("SSH", "Requesting PTY of size " + x + "x" + y);
-
-			session.requestPTY("vt100", x, y, term.getWidth(), term.getHeight(), null);
-
-			Log.d("SSH", "Requesting shell...");
 			session.startShell();
 
 			stdIn = session.getStdin();
@@ -157,16 +143,14 @@ public class TrileadConnectionThread extends ConnectionThread {
 
 			ui.setWaiting(false, null, null);
 		} catch (IOException e) {
-			Log.e("SSH", e.getMessage());
 			ui.setWaiting(false, null, null);
 			return;
 		} catch (InterruptedException e) {
 			// This thread is coming to an end. Let us exit.
-			Log.e("SSH", "Connection thread interrupted.");
 			return;
 		}
 
-		term.start(session);
+		term.start(stdOut, stdIn);
 	}
 
 	@Override
@@ -177,21 +161,4 @@ public class TrileadConnectionThread extends ConnectionThread {
 			this.password = password;
 		sPass.release();
 	}
-	
-    final Runnable mDisconnectAlert = new Runnable() {
-    	public void run() {
-			AlertDialog d = AlertDialog.show((Context) ui,
-					"Connection Lost", disconnectReason, "Ok", false);
-			d.show();
-			// TODO: Return to previous activity if connection fails.
-	    }
-    };
-    
-    final ConnectionMonitor mConnectionMonitor = new ConnectionMonitor() {
-    	public void connectionLost(Throwable reason) {
-    		Log.d("SSH", "Connection ended.");
-    		disconnectReason = reason.getMessage();
-    		ui.getHandler().post(mDisconnectAlert);
-    	}
-    };
 }

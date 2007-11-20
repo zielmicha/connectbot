@@ -22,11 +22,12 @@
 
 package com.jcraft.jcterm;
 
-import com.trilead.ssh2.Session;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 public interface Term{
 
-  void start(Session connection);
+  void start(InputStream in, OutputStream out);
 
   int getRowCount();
 

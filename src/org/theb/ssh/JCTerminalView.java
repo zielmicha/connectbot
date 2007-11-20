@@ -36,15 +36,12 @@ import android.view.View;
 import com.jcraft.jcterm.Emulator;
 import com.jcraft.jcterm.EmulatorVT100;
 import com.jcraft.jcterm.Term;
-import com.trilead.ssh2.Session;
 
 public class JCTerminalView extends View implements Term, Terminal {
 	private final Paint mPaint;
-	Bitmap mBitmap;
-	Canvas mCanvas;
-	
-	private OutputStream out;
-	private InputStream in;
+	private Bitmap mBitmap;
+	private Canvas mCanvas;
+
 	private Emulator emulator = null;
 	
 	private boolean mBold = false;
@@ -65,6 +62,11 @@ public class JCTerminalView extends View implements Term, Terminal {
 	private int mCharWidth;
 	private int mDescent;
 	
+	
+	// Cursor location
+	private int x = 0;
+	private int y = 0;
+	
 	private final Object[] mColors = {Color.BLACK, Color.RED, Color.GREEN, Color.YELLOW,
 			Color.BLUE, Color.MAGENTA, Color.CYAN, Color.WHITE};
 	
@@ -79,10 +81,21 @@ public class JCTerminalView extends View implements Term, Terminal {
 
 	@Override
 	protected void onDraw(Canvas canvas) {
-		if (mBitmap != null)
+		if (mBitmap != null) {
 			canvas.drawBitmap(mBitmap, 0, 0, null);
+			
+			if (mCharHeight > 0 && y > mCharHeight) {
+				// Invert pixels for cursor position.
+				Bitmap cursor = Bitmap.createBitmap(mBitmap, x, y - mCharHeight, mCharWidth, mCharHeight);
+				for (int cy = 0; cy < mCharHeight; cy++)
+					for (int cx = 0; cx < mCharWidth; cx++)
+						cursor.setPixel(cx, cy, (~cursor.getPixel(cx, cy) & 0xFFFFFFFF) | 0xFF000000);
+				canvas.drawBitmap(cursor, x, y - mCharHeight, null);
+				cursor = null;
+			}
+		}
 	}
-	
+ 
 	@Override
 	protected void onSizeChanged(int w, int h, int oldw, int oldh) {
 		Log.d("SSH/TerminalView", "onSizeChanged called");
@@ -175,18 +188,13 @@ public class JCTerminalView extends View implements Term, Terminal {
 	}
 
 	public void drawString(String str, int x, int y) {
-		// Log.d("SSH", "at (" + x + "," + y + ") drawing string: " + str);
+		mPaint.setFakeBoldText(mBold);
+		mPaint.setUnderlineText(mUnderline);
 		mCanvas.drawText(str, x, y - mDescent, mPaint);
-		if (mBold)
-			mCanvas.drawText(str, x + 1, y - mDescent, mPaint);
-		
-		if (mUnderline)
-			mCanvas.drawLine(x, y - 1, x + str.length() * mCharWidth, y - 1, mPaint);
 	}
 
 	public void draw_cursor() {
-		// TODO Auto-generated method stub
-		
+		postInvalidate();
 	}
 
 	public int getCharHeight() {
@@ -220,7 +228,7 @@ public class JCTerminalView extends View implements Term, Terminal {
 	}
 
 	public void redraw(int x, int y, int width, int height) {
-		// invalidate(x, y, x+width, y+height);
+		//invalidate(x, y, x+width, y+height);
 		postInvalidate();
 	}
 
@@ -262,6 +270,13 @@ public class JCTerminalView extends View implements Term, Terminal {
 	}
 
 	public void setCursor(int x, int y) {
+		// Make sure we don't go outside the bounds of the window.
+		this.x = Math.max(
+				Math.min(x, getWidth() - mCharWidth),
+				0);
+		this.y = Math.max(
+				Math.min(y, getHeight()),
+				mCharHeight);
 	}
 
 	public void setDefaultBackGround(Object background) {
@@ -286,16 +301,7 @@ public class JCTerminalView extends View implements Term, Terminal {
 		mUnderline = true;
 	}
 
-	public void start(Object session) {
-		if (session instanceof Session) {
-			start((Session)session);
-		}
-	}
-	
-	public void start(Session session) {
-		in = session.getStdout();
-		out = session.getStdin();
-		
+	public void start(InputStream in, OutputStream out) {
 		emulator = new EmulatorVT100(this, in);
 		emulator.reset();
 		emulator.start();
@@ -303,15 +309,7 @@ public class JCTerminalView extends View implements Term, Terminal {
 		clear();
 	}
 
-	public InputStream getInput() {
-		return in;
-	}
-
-	public OutputStream getOutput() {
-		return out;
-	}
-
-	public byte[] getKeyCode(int keyCode) {
+	public byte[] getKeyCode(int keyCode, int meta) {
 		if (keyCode == KeyEvent.KEYCODE_NEWLINE)
 			return emulator.getCodeENTER();
 		else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT)

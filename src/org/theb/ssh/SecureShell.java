@@ -23,7 +23,10 @@ import java.io.OutputStream;
 
 import org.theb.provider.HostDb;
 
+import com.trilead.ssh2.ConnectionMonitor;
+
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.database.Cursor;
@@ -35,7 +38,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
 
-public class SecureShell extends Activity implements FeedbackUI {
+public class SecureShell extends Activity implements FeedbackUI, ConnectionMonitor {
 	private ConnectionThread mConn;
 	
 	// Activities we support.
@@ -77,12 +80,17 @@ public class SecureShell extends Activity implements FeedbackUI {
 
 	final Handler mHandler = new Handler();
 	
+	// Tell the user why we disconnected.
+	private String mDisconnectReason;
+
     @Override
     public void onCreate(Bundle savedValues) {
         super.onCreate(savedValues);
         
         requestWindowFeature(Window.FEATURE_PROGRESS);
-        mTerminal = new JCTerminalView(this);
+        mTerminal = new JTATerminalView(this);
+        
+        // TODO: implement scroll bar on right.
         setContentView((View)mTerminal);
         
         Log.d("SSH", "using URI " + getIntent().getData().toString());
@@ -181,7 +189,7 @@ public class SecureShell extends Activity implements FeedbackUI {
 	    				|| keyCode == KeyEvent.KEYCODE_DPAD_UP
 	    				|| keyCode == KeyEvent.KEYCODE_DPAD_DOWN
 	    				|| keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-	    			byte[] output = mTerminal.getKeyCode(keyCode);
+	    			byte[] output = mTerminal.getKeyCode(keyCode, msg.getMetaState());
 	    			if (output != null)
 	    				out.write(output);
 	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
@@ -203,7 +211,21 @@ public class SecureShell extends Activity implements FeedbackUI {
 		return super.onKeyDown(keyCode, msg);
     }
 
-	public Handler getHandler() {
-		return mHandler;
+    final Runnable mDisconnectAlert = new Runnable() {
+    	public void run() {
+    		if (SecureShell.this.isFinishing())
+    			return;
+    		
+			AlertDialog d = AlertDialog.show(SecureShell.this,
+					"Connection Lost", mDisconnectReason, "Ok", false);
+			d.show();
+			// TODO: Return to previous activity if connection fails.
+	    }
+    };
+    
+	public void connectionLost(Throwable reason) {
+		Log.d("SSH", "Connection ended.");
+		mDisconnectReason = reason.getMessage();
+		mHandler.post(mDisconnectAlert);
 	}
 }
