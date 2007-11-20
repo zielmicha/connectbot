@@ -27,6 +27,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.PixelXorXfermode;
 import android.graphics.Typeface;
 import android.graphics.Paint.FontMetricsInt;
 import android.util.Log;
@@ -42,6 +43,8 @@ public class JCTerminalView extends View implements Term, Terminal {
 	private Bitmap mBitmap;
 	private Canvas mCanvas;
 
+	private final Paint mCursorPaint;
+	
 	private Emulator emulator = null;
 	
 	private boolean mBold = false;
@@ -76,6 +79,11 @@ public class JCTerminalView extends View implements Term, Terminal {
 		mPaint.setAntiAlias(mAntialias);
 		mPaint.setColor(mDefaultForeground);
 		
+		mCursorPaint = new Paint();
+		mCursorPaint.setAntiAlias(mAntialias);
+		mCursorPaint.setColor(mDefaultForeground);
+		mCursorPaint.setXfermode(new PixelXorXfermode(mDefaultBackground));
+		
 		setFont(Typeface.MONOSPACE);
 	}
 
@@ -86,12 +94,7 @@ public class JCTerminalView extends View implements Term, Terminal {
 			
 			if (mCharHeight > 0 && y > mCharHeight) {
 				// Invert pixels for cursor position.
-				Bitmap cursor = Bitmap.createBitmap(mBitmap, x, y - mCharHeight, mCharWidth, mCharHeight);
-				for (int cy = 0; cy < mCharHeight; cy++)
-					for (int cx = 0; cx < mCharWidth; cx++)
-						cursor.setPixel(cx, cy, (~cursor.getPixel(cx, cy) & 0xFFFFFFFF) | 0xFF000000);
-				canvas.drawBitmap(cursor, x, y - mCharHeight, null);
-				cursor = null;
+				canvas.drawRect(x, y - mCharHeight, x + mCharWidth, y, mCursorPaint);
 			}
 		}
 	}
@@ -246,7 +249,7 @@ public class JCTerminalView extends View implements Term, Terminal {
 
 	public void scroll_area(int x, int y, int w, int h, int dx, int dy) {
 		// TODO: make scrolling more efficient (memory-wise)
-		mCanvas.drawBitmap(Bitmap.createBitmap(mBitmap, x, y, w, h), x+dx, y+dy, mPaint);
+		mCanvas.drawBitmap(Bitmap.createBitmap(mBitmap, x, y, w, h), x+dx, y+dy, null);
 	}
 
 	private int toColor(Object o) {
