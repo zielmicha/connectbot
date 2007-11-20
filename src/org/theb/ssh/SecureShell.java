@@ -1,14 +1,11 @@
 package org.theb.ssh;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.concurrent.Semaphore;
 
 import org.theb.provider.HostDb;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.database.Cursor;
@@ -17,28 +14,19 @@ import android.os.Handler;
 import android.text.method.KeyCharacterMap;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.Window;
-import android.widget.TextView;
 
-import com.trilead.ssh2.ChannelCondition;
-import com.trilead.ssh2.Connection;
-import com.trilead.ssh2.ConnectionMonitor;
-import com.trilead.ssh2.Session;
-
-public class SecureShell extends Activity {
-	private TextView mOutput;
+public class SecureShell extends Activity implements FeedbackUI {
 	private ConnectionThread mConn;
-	private String mBuffer;
-	private KeyCharacterMap mKMap;
 	
+	// Activities we support.
 	static final int PASSWORD_REQUEST = 0;
 	
+	// Database projection indices.
 	private static final int HOSTNAME_INDEX = 1;
 	private static final int USERNAME_INDEX = 2;
 	private static final int PORT_INDEX = 3;
-	
-	// We change the meta state when the user presses the center button.
-	private boolean mMetaState = false;
 	
 	private static final String[] PROJECTION = new String[] {
 		HostDb.Hosts._ID, // 0
@@ -49,8 +37,14 @@ public class SecureShell extends Activity {
 	
 	private Cursor mCursor;
 	
+	// Map to convert from keyboard presses to actual characters.
+	private KeyCharacterMap mKMap;
+
 	// Terminal window
-	private TerminalView mTerminal;
+	private Terminal mTerminal;
+	
+	// We change the meta state when the user presses the center button.
+	private boolean mMetaState = false;
 	
 	// Store the username, hostname, and port from the database.
 	private String mHostname;
@@ -62,126 +56,8 @@ public class SecureShell extends Activity {
 	private boolean mIsWaiting;
 	private String mWaitingTitle;
 	private String mWaitingMessage;
-	
-	// Connection lost reason.
-	private String mDisconnectReason;
-	
-	// This is for the password dialog.
-	Semaphore sPass;
-	String mPassword = null;
-	
-	Connection conn;
-	Session sess;
-	InputStream stdin;
-	InputStream stderr;
-	OutputStream stdout;
-	int x;
-	int y;
-		
+
 	final Handler mHandler = new Handler();
-	
-	final Runnable mUpdateView = new Runnable() {
-		public void run() {
-			updateViewInUI();
-		}
-	};
-	
-	class ConnectionThread extends Thread {
-		String hostname;
-		String username;
-		int port;
-		
-		public ConnectionThread(String hostname, String username, int port) {
-			this.hostname = hostname;
-			this.username = username;
-			this.port = port;
-		}
-		
-		public void run() {
-			conn = new Connection(hostname, port);
-
-			conn.addConnectionMonitor(mConnectionMonitor);
-			
-            setWaiting(true, "Connection",
-            		"Connecting to " + hostname + "...");
-			
-			Log.d("SSH", "Starting connection attempt...");
-
-	        try {
-				conn.connect(new InteractiveHostKeyVerifier());
-
-				setWaiting(true, "Authenticating",
-						"Trying to authenticate...");
-				
-				Log.d("SSH", "Starting authentication...");
-				
-//				boolean enableKeyboardInteractive = true;
-//				boolean enableDSA = true;
-//				boolean enableRSA = true;
-				
-				while (true) {
-					/*
-					if ((enableDSA || enableRSA ) &&
-							mConn.isAuthMethodAvailable(username, "publickey");
-							*/
-					
-					if (conn.isAuthMethodAvailable(username, "password")) {
-						Log.d("SSH", "Trying password authentication...");
-						setWaiting(true, "Authenticating",
-								"Trying to authenticate using password...");
-						
-						// Set a semaphore that is unset by the returning dialog.
-						sPass = new Semaphore(0);
-						askPassword();
-						
-						// Wait for the user to answer.
-						sPass.acquire();
-						sPass = null;
-						if (mPassword == null)
-							continue;
-						
-						boolean res = conn.authenticateWithPassword(username, mPassword);
-						if (res == true)
-							break;
-						
-						continue;
-					}
-					
-					throw new IOException("No supported authentication methods available.");
-				}
-				
-				Log.d("SSH", "Opening session...");
-				setWaiting(true, "Session", "Requesting shell...");
-				
-				sess = conn.openSession();
-				
-		        y = mTerminal.getRowCount();
-		        x = mTerminal.getColumnCount();
-		        Log.d("SSH", "Requesting PTY of size " + x + "x" + y);
-		        
-				sess.requestPTY("vt100", x, y, mTerminal.getWidth(), mTerminal.getHeight(), null);
-
-				Log.d("SSH", "Requesting shell...");
-				sess.startShell();
-
-				stdout = sess.getStdin();
-				stderr = sess.getStderr();
-				stdin = sess.getStdout();
-
-				setWaiting(false, null, null);
-			} catch (IOException e) {
-				Log.e("SSH", e.getMessage());
-				setWaiting(false, null, null);
-				return;
-			} catch (InterruptedException e) {
-				// This thread is coming to an end. Let us exit.
-				Log.e("SSH", "Connection thread interrupted.");
-				return;
-			}
-			
-			mTerminal.start(sess);
-		}
-	}
 	
     @Override
     public void onCreate(Bundle savedValues) {
@@ -189,8 +65,7 @@ public class SecureShell extends Activity {
         
         requestWindowFeature(Window.FEATURE_PROGRESS);
         mTerminal = new JCTerminalView(this);
-        setContentView(mTerminal);
-        //mOutput = (TextView) findViewById(R.id.output);
+        setContentView((View)mTerminal);
         
         Log.d("SSH", "using URI " + getIntent().getData().toString());
         
@@ -207,7 +82,7 @@ public class SecureShell extends Activity {
         
         this.setTitle(title);
         
-        mConn = new ConnectionThread(mHostname, mUsername, mPort);
+        mConn = new TrileadConnectionThread(this, mTerminal, mHostname, mUsername, mPort);
         
         mKMap = KeyCharacterMap.load(KeyCharacterMap.BUILT_IN_KEYBOARD);
 
@@ -240,10 +115,9 @@ public class SecureShell extends Activity {
 		}
 	};
 
-	public String askPassword() {
+	public void askPassword() {
     	Intent intent = new Intent(this, PasswordDialog.class);
     	this.startSubActivity(intent, PASSWORD_REQUEST);
-    	return null;
 	}
 
     @Override
@@ -251,37 +125,24 @@ public class SecureShell extends Activity {
             String data, Bundle extras)
 	{
 	    if (requestCode == PASSWORD_REQUEST) {
-	
-	        // If the request was cancelled, then we didn't get anything.
-	        if (resultCode == RESULT_CANCELED)
-				mPassword = "";
-			else
-	            mPassword = data;
-	        
-            sPass.release();
+	    	mConn.setPassword(data);
 	    }
 	}
     
 	@Override
     public void onDestroy() {
     	super.onDestroy();
-    	
-    	if (sess != null) {
-    		sess.close();
-    		sess = null;
-    	}
-    	
-    	if (conn != null) {
-    		conn.close();
-    		conn = null;
-    	}
+
+    	mConn.finish();
+    	mConn = null;
     	
     	finish();
     }
     
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent msg) {
-    	if (stdout != null) {
+    	final OutputStream out = mConn.getWriter();
+    	if (out != null) {
 	    	try {
 	    		if (mKMap.isPrintingKey(keyCode)
 	    				|| keyCode == KeyEvent.KEYCODE_SPACE) {
@@ -294,9 +155,9 @@ public class SecureShell extends Activity {
 			    			c -= 0x39;
 			    		mMetaState = false;
 			    	}
-					stdout.write(c);
+					out.write(c);
 	    		} else	if (keyCode == KeyEvent.KEYCODE_DEL) {
-					stdout.write(0x08); // CTRL-H
+					out.write(0x08); // CTRL-H
 	    		} else if (keyCode == KeyEvent.KEYCODE_NEWLINE
 	    				|| keyCode == KeyEvent.KEYCODE_DPAD_LEFT
 	    				|| keyCode == KeyEvent.KEYCODE_DPAD_UP
@@ -304,10 +165,10 @@ public class SecureShell extends Activity {
 	    				|| keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
 	    			byte[] output = mTerminal.getKeyCode(keyCode);
 	    			if (output != null)
-	    				stdout.write(output);
+	    				out.write(output);
 	    		} else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
 	    			if (mMetaState) {
-	    				stdout.write(0x1B); // ESCAPE
+	    				out.write(0x1B); // ESCAPE
 	    				mMetaState = false;
 	    			} else {
 	    				mMetaState = true;
@@ -323,28 +184,8 @@ public class SecureShell extends Activity {
     	}
 		return super.onKeyDown(keyCode, msg);
     }
-    
-    public void updateViewInUI() {
-    	mOutput.setText(mBuffer);
-    }
 
-    final Runnable mDisconnectAlert = new Runnable() {
-    	public void run() {
-    		if (SecureShell.this == null)
-    			return;
-    		
-			AlertDialog d = AlertDialog.show(SecureShell.this,
-					"Connection Lost", mDisconnectReason, "Ok", false);
-			d.show();
-			// TODO: Return to previous activity if connection fails.
-	    }
-    };
-    
-    final ConnectionMonitor mConnectionMonitor = new ConnectionMonitor() {
-    	public void connectionLost(Throwable reason) {
-    		Log.d("SSH", "Connection ended.");
-    		mDisconnectReason = reason.getMessage();
-    		mHandler.post(mDisconnectAlert);
-    	}
-    };
+	public Handler getHandler() {
+		return mHandler;
+	}
 }

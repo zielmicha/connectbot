@@ -9,7 +9,6 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.Paint.FontMetricsInt;
 import android.util.Log;
@@ -21,7 +20,7 @@ import com.jcraft.jcterm.EmulatorVT100;
 import com.jcraft.jcterm.Term;
 import com.trilead.ssh2.Session;
 
-public class JCTerminalView extends TerminalView implements Term {
+public class JCTerminalView extends View implements Term, Terminal {
 	private final Paint mPaint;
 	Bitmap mBitmap;
 	Canvas mCanvas;
@@ -47,16 +46,10 @@ public class JCTerminalView extends TerminalView implements Term {
 	private int mCharHeight;
 	private int mCharWidth;
 	private int mDescent;
-	private int mLineSpace = -2;
-	
-	private int x = 0;
-	private int y = 0;
 	
 	private final Object[] mColors = {Color.BLACK, Color.RED, Color.GREEN, Color.YELLOW,
 			Color.BLUE, Color.MAGENTA, Color.CYAN, Color.WHITE};
 	
-	private Session session;
-
 	public JCTerminalView(Context c) {
 		super(c);
 		mPaint = new Paint();
@@ -251,9 +244,6 @@ public class JCTerminalView extends TerminalView implements Term {
 	}
 
 	public void setCursor(int x, int y) {
-		//Log.d("SSH/setCursor", "Cursor placed at (" + x + ", " + y + ")");
-		this.x = x;
-		this.y = y;
 	}
 
 	public void setDefaultBackGround(Object background) {
@@ -285,7 +275,6 @@ public class JCTerminalView extends TerminalView implements Term {
 	}
 	
 	public void start(Session session) {
-		this.session = session;
 		in = session.getStdout();
 		out = session.getStdin();
 		
@@ -296,17 +285,14 @@ public class JCTerminalView extends TerminalView implements Term {
 		clear();
 	}
 
-	@Override
 	public InputStream getInput() {
 		return in;
 	}
 
-	@Override
 	public OutputStream getOutput() {
 		return out;
 	}
 
-	@Override
 	public byte[] getKeyCode(int keyCode) {
 		if (keyCode == KeyEvent.KEYCODE_NEWLINE)
 			return emulator.getCodeENTER();
