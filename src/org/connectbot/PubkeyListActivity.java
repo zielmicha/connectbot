@@ -385,6 +385,22 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 			}
 		});
 		
+		MenuItem copyPrivateToClipboard = menu.add(R.string.pubkey_copy_private);
+		copyPrivateToClipboard.setEnabled(!imported);
+		copyPrivateToClipboard.setOnMenuItemClickListener(new OnMenuItemClickListener() {
+			public boolean onMenuItemClick(MenuItem item) {
+				try {
+					PrivateKey pk = PubkeyUtils.decodePrivate(pubkey.getPrivateKey(), pubkey.getType());
+					String openSSHPrivate = new String(PubkeyUtils.exportPEM(pk, null));
+										
+					clipboard.setText(openSSHPrivate);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+				return true;
+			}
+		});
+		
 		MenuItem changePassword = menu.add(R.string.pubkey_change_password);
 		changePassword.setEnabled(!imported);
 		changePassword.setOnMenuItemClickListener(new OnMenuItemClickListener() {

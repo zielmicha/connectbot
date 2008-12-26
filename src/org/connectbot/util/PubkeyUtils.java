@@ -18,7 +18,10 @@
 
 package org.connectbot.util;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.math.BigInteger;
+import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyFactory;
@@ -26,9 +29,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.SecureRandom;
 import java.security.interfaces.DSAParams;
 import java.security.interfaces.DSAPrivateKey;
 import java.security.interfaces.DSAPublicKey;
+import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.InvalidKeySpecException;
@@ -39,7 +44,18 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+
+import org.bouncycastle.asn1.ASN1EncodableVector;
+import org.bouncycastle.asn1.ASN1OutputStream;
+import org.bouncycastle.asn1.DERInteger;
+import org.bouncycastle.asn1.DERSequence;
+import org.bouncycastle.crypto.PBEParametersGenerator;
+import org.bouncycastle.crypto.generators.OpenSSLPBEParametersGenerator;
+import org.bouncycastle.crypto.params.KeyParameter;
+import org.bouncycastle.util.encoders.Hex;
 
 import com.trilead.ssh2.crypto.Base64;
 import com.trilead.ssh2.signature.DSASHA1Verify;
@@ -180,4 +196,97 @@ public class PubkeyUtils {
 		
 		throw new InvalidKeyException("Unknown key type");
 	}
+	
+	public static String exportPEM(PrivateKey key, String secret) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException, InvalidKeySpecException, IOException {		
+		StringBuilder sb = new StringBuilder();
+		
+		String type;
+		byte[] data = null;
+		if (key instanceof RSAPrivateCrtKey) {
+			type = "RSA";
+			
+			RSAPrivateCrtKey pck = (RSAPrivateCrtKey) key;
+			
+			ASN1EncodableVector vector = new ASN1EncodableVector();
+			vector.add(new DERInteger(0));
+			vector.add(new DERInteger(pck.getModulus()));
+			vector.add(new DERInteger(pck.getPublicExponent()));
+			vector.add(new DERInteger(pck.getPrivateExponent()));
+			vector.add(new DERInteger(pck.getPrimeP()));
+			vector.add(new DERInteger(pck.getPrimeQ()));
+			vector.add(new DERInteger(pck.getPrimeExponentP()));
+			vector.add(new DERInteger(pck.getPrimeExponentQ()));
+			vector.add(new DERInteger(pck.getCrtCoefficient()));
+
+			ByteArrayOutputStream bout = new ByteArrayOutputStream();
+			ASN1OutputStream aout = new ASN1OutputStream(bout);
+			aout.writeObject(new DERSequence(vector));
+			aout.close();
+			data = bout.toByteArray();
+			bout.close();
+		} else if (key instanceof DSAPrivateKey) {
+			type = "DSA";
+			
+			DSAPrivateKey k = (DSAPrivateKey) key;
+            DSAParams p = k.getParams();
+
+			ASN1EncodableVector v = new ASN1EncodableVector();
+
+            v.add(new DERInteger(0));
+            v.add(new DERInteger(p.getP()));
+            v.add(new DERInteger(p.getQ()));
+            v.add(new DERInteger(p.getG()));
+
+            BigInteger x = k.getX();
+            BigInteger y = p.getG().modPow(x, p.getP());
+
+            v.add(new DERInteger(y));
+            v.add(new DERInteger(x));
+
+            ByteArrayOutputStream bout = new ByteArrayOutputStream();
+			ASN1OutputStream aout = new ASN1OutputStream(bout);
+			aout.writeObject(new DERSequence(v));
+			aout.close();
+			data = bout.toByteArray();
+			bout.close();
+		} else
+			throw new IllegalArgumentException("Key is not one of RSA or DSA");
+
+		sb.append("-----BEGIN " + type + " PRIVATE KEY-----\n");
+		
+		if (secret != null) {
+			byte[] salt = new byte[8];
+			SecureRandom random = new SecureRandom();
+			random.nextBytes(salt);
+			
+			int keyLength = 24;
+			String algorithm = "DESede";
+			OpenSSLPBEParametersGenerator pGen = new OpenSSLPBEParametersGenerator();
+			pGen.init(PBEParametersGenerator.PKCS5PasswordToBytes(secret.toCharArray()), salt);
+			SecretKey secretKey = new javax.crypto.spec.SecretKeySpec(
+					((KeyParameter) pGen.generateDerivedParameters(keyLength * 8)).getKey(),
+					algorithm); 
+			
+			Cipher c = Cipher.getInstance(algorithm);
+			c.init(Cipher.ENCRYPT_MODE, secretKey, new IvParameterSpec(salt));
+			
+			sb.append("Proc-Type: 4,ENCRYPTED\n");
+			sb.append("DEK-Info: DES-EDE3-CBC,");
+			sb.append(new String(Hex.encode(salt)));
+			sb.append("\n\n");
+			
+			byte[] encrypted = c.doFinal(data);
+			data = encrypted;
+		}
+		
+		int i = sb.length();
+		sb.append(Base64.encode(data));
+		for (i += 63; i < sb.length(); i += 64) {
+			sb.insert(i, "\n");
+		}
+		
+		sb.append("\n-----END " + type + " PRIVATE KEY-----\n");
+
+		return sb.toString();
+	} 
 }
