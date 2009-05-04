@@ -25,6 +25,8 @@ import java.util.regex.Pattern;
 import org.connectbot.bean.HostBean;
 import org.connectbot.service.TerminalBridge;
 import org.connectbot.service.TerminalManager;
+import org.connectbot.transport.AbsTransport;
+import org.connectbot.transport.TransportFactory;
 import org.connectbot.util.HostDatabase;
 import org.connectbot.util.UpdateHelper;
 
@@ -60,6 +62,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.AdapterView.OnItemClickListener;
 
@@ -75,6 +78,8 @@ public class HostListActivity extends ListActivity {
 	private MenuItem sortcolor;
 
 	private MenuItem sortlast;
+
+	private ArrayAdapter<String> transportSelection;
 
 	protected Handler updateHandler = new Handler() {
 		@Override
@@ -190,7 +195,8 @@ public class HostListActivity extends ListActivity {
 				HostBean host = (HostBean) parent.getAdapter().getItem(position);
 
 				// create a specific uri that represents this host
-				Uri uri = Uri.parse(String.format("ssh://%s@%s:%d/#%s",
+				Uri uri = Uri.parse(String.format("%s://%s@%s:%d/#%s",
+						Uri.encode(host.getProtocol()),
 						Uri.encode(host.getUsername()),
 						Uri.encode(host.getHostname()),
 						host.getPort(),
@@ -220,7 +226,7 @@ public class HostListActivity extends ListActivity {
 
 		this.registerForContextMenu(list);
 
-		final Pattern hostmask = Pattern.compile("^([^@]+)@([0-9A-Z.-]+)(:(\\d+))?$", Pattern.CASE_INSENSITIVE);
+		final Pattern hostmask = Pattern.compile("^(([a-z]+)://)?((.+)@)?([0-9a-z.-]+)(:(\\d+))?$", Pattern.CASE_INSENSITIVE);
 		final TextView text = (TextView) this.findViewById(R.id.front_quickconnect);
 		text.setVisibility(makingShortcut ? View.GONE : View.VISIBLE);
 		text.setOnKeyListener(new OnKeyListener() {
@@ -242,31 +248,37 @@ public class HostListActivity extends ListActivity {
 				}
 
 				// create new host for entered string and then launch
-				String username = matcher.group(1);
-				String hostname = matcher.group(2);
+				String protocol = matcher.group(2);
+				String username = matcher.group(4);
+				String hostname = matcher.group(5);
 
-				int port = 22;
+				if (protocol == null)
+					protocol = "ssh";
+
+				AbsTransport transport = TransportFactory.getTransport(protocol);
+				if (transport == null) {
+					text.setError(getString(R.string.list_format_error));
+					return false;
+				}
+
+				int port = transport.getDefaultPort();
 				try {
-					port = Integer.parseInt(matcher.group(4));
+					if (matcher.group(7) != null)
+						port = Integer.parseInt(matcher.group(7));
 				} catch (Exception e) {
-					Log.i("HostListActivity", "Invalid format for port: "+ matcher.group(4));
+					Log.i("HostListActivity", "Invalid format for port: "+ matcher.group(7));
 				}
 
-				String nickname;
-				if (port == 22) {
-					nickname = String.format("%s@%s", username, hostname);
-				} else {
-					nickname = String.format("%s@%s:%d", username, hostname, port);
-				}
+				String nickname = transport.getDefaultNickname(username, hostname, port);
 
-				HostBean host = new HostBean(nickname, username, hostname, port);
+				HostBean host = new HostBean(nickname, protocol, username, hostname, port);
 				host.setColor(HostDatabase.COLOR_GRAY);
 				host.setPubkeyId(HostDatabase.PUBKEYID_ANY);
 				hostdb.saveHost(host);
 
 				Intent intent = new Intent(HostListActivity.this, ConsoleActivity.class);
-				intent.setData(Uri.parse(String.format("ssh://%s@%s:%d/#%s",
-						Uri.encode(username), Uri.encode(hostname), port, Uri.encode(nickname))));
+				intent.setData(Uri.parse(String.format("%s://%s@%s:%d/#%s",
+						Uri.encode(protocol), Uri.encode(username), Uri.encode(hostname), port, Uri.encode(nickname))));
 				HostListActivity.this.startActivity(intent);
 
 				// set list filter based on text
@@ -278,6 +290,12 @@ public class HostListActivity extends ListActivity {
 			}
 
 		});
+
+		Spinner transportSpinner = (Spinner)findViewById(R.id.transport_selection);
+		ArrayAdapter<String> transportSelection = new ArrayAdapter<String>(this,
+				android.R.layout.simple_spinner_item, TransportFactory.getTransportNames());
+		transportSelection.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+		transportSpinner.setAdapter(transportSelection);
 
 		this.inflater = (LayoutInflater)getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 	}

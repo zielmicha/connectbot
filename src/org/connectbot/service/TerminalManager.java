@@ -68,12 +68,12 @@ public class TerminalManager extends Service implements BridgeDisconnectedListen
 
 	public Handler disconnectHandler = null;
 
-	protected HashMap<String, Object> loadedPubkeys = new HashMap<String, Object>();
+	public HashMap<String, Object> loadedPubkeys = new HashMap<String, Object>();
 
-	protected Resources res;
+	public Resources res;
 
-	protected HostDatabase hostdb;
-	protected PubkeyDatabase pubkeydb;
+	public HostDatabase hostdb;
+	public PubkeyDatabase pubkeydb;
 
 	protected SharedPreferences prefs;
 	private String pref_emulation, pref_scrollback, pref_keymode, pref_memkeys, pref_wifilock;
@@ -206,16 +206,17 @@ public class TerminalManager extends Service implements BridgeDisconnectedListen
 	 */
 	public void openConnection(Uri uri) throws Exception {
 		String nickname = uri.getFragment();
+		String protocol = uri.getScheme();
 		String username = uri.getUserInfo();
 		String hostname = uri.getHost();
 		int port = uri.getPort();
 
-		HostBean host = hostdb.findHost(nickname, username, hostname, port);
+		HostBean host = hostdb.findHost(nickname, protocol, username, hostname, port);
 
 		if (host == null) {
-			Log.d(TAG, String.format("Didn't find existing host (nickname=%s, username=%s, hostname=%s, port=%d)",
-					nickname, username, hostname, port));
-			host = new HostBean(nickname, username, hostname, port);
+			Log.d(TAG, String.format("Didn't find existing host (nickname=%s, protocol=%s, username=%s, hostname=%s, port=%d)",
+					nickname, protocol, username, hostname, port));
+			host = new HostBean(nickname, protocol, username, hostname, port);
 		}
 
 		this.openConnection(host);

@@ -24,14 +24,14 @@ import java.util.List;
 import org.connectbot.bean.HostBean;
 import org.connectbot.bean.PortForwardBean;
 
-import com.trilead.ssh2.KnownHosts;
-
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
+
+import com.trilead.ssh2.KnownHosts;
 
 /**
  * Contains information about various SSH hosts, include public hostkey if known
@@ -44,10 +44,11 @@ public class HostDatabase extends SQLiteOpenHelper {
 	public final static String TAG = HostDatabase.class.toString();
 
 	public final static String DB_NAME = "hosts";
-	public final static int DB_VERSION = 15;
+	public final static int DB_VERSION = 16;
 
 	public final static String TABLE_HOSTS = "hosts";
 	public final static String FIELD_HOST_NICKNAME = "nickname";
+	public final static String FIELD_HOST_PROTOCOL = "protocol";
 	public final static String FIELD_HOST_USERNAME = "username";
 	public final static String FIELD_HOST_HOSTNAME = "hostname";
 	public final static String FIELD_HOST_PORT = "port";
@@ -96,6 +97,7 @@ public class HostDatabase extends SQLiteOpenHelper {
 		db.execSQL("CREATE TABLE " + TABLE_HOSTS
 				+ " (_id INTEGER PRIMARY KEY, "
 				+ FIELD_HOST_NICKNAME + " TEXT, "
+				+ FIELD_HOST_PROTOCOL + " TEXT DEFAULT 'ssh', "
 				+ FIELD_HOST_USERNAME + " TEXT, "
 				+ FIELD_HOST_HOSTNAME + " TEXT, "
 				+ FIELD_HOST_PORT + " INTEGER, "
@@ -156,6 +158,9 @@ public class HostDatabase extends SQLiteOpenHelper {
 		case 14:
 			db.execSQL("ALTER TABLE " + TABLE_HOSTS
 					+ " ADD COLUMN " + FIELD_HOST_ENCODING + " TEXT DEFAULT '" + ENCODING_ASCII + "'");
+		case 15:
+			db.execSQL("ALTER TABLE " + TABLE_HOSTS
+					+ " ADD COLUMN " + FIELD_HOST_PROTOCOL + " TEXT DEFAULT 'ssh'");
 		}
 	}
 
@@ -209,12 +214,26 @@ public class HostDatabase extends SQLiteOpenHelper {
 		String sortField = sortColors ? FIELD_HOST_COLOR : FIELD_HOST_NICKNAME;
 		SQLiteDatabase db = this.getReadableDatabase();
 
-		List<HostBean> hosts = new LinkedList<HostBean>();
-
 		Cursor c = db.query(TABLE_HOSTS, null, null, null, null, null, sortField + " ASC");
+
+		List<HostBean> hosts = createHostBeans(c);
+
+		c.close();
+		db.close();
+
+		return hosts;
+	}
+
+	/**
+	 * @param hosts
+	 * @param c
+	 */
+	private List<HostBean> createHostBeans(Cursor c) {
+		List<HostBean> hosts = new LinkedList<HostBean>();
 
 		final int COL_ID = c.getColumnIndexOrThrow("_id"),
 			COL_NICKNAME = c.getColumnIndexOrThrow(FIELD_HOST_NICKNAME),
+			COL_PROTOCOL = c.getColumnIndexOrThrow(FIELD_HOST_PROTOCOL),
 			COL_USERNAME = c.getColumnIndexOrThrow(FIELD_HOST_USERNAME),
 			COL_HOSTNAME = c.getColumnIndexOrThrow(FIELD_HOST_HOSTNAME),
 			COL_PORT = c.getColumnIndexOrThrow(FIELD_HOST_PORT),
@@ -232,6 +251,7 @@ public class HostDatabase extends SQLiteOpenHelper {
 
 			host.setId(c.getLong(COL_ID));
 			host.setNickname(c.getString(COL_NICKNAME));
+			host.setProtocol(c.getString(COL_PROTOCOL));
 			host.setUsername(c.getString(COL_USERNAME));
 			host.setHostname(c.getString(COL_HOSTNAME));
 			host.setPort(c.getInt(COL_PORT));
@@ -247,39 +267,47 @@ public class HostDatabase extends SQLiteOpenHelper {
 			hosts.add(host);
 		}
 
-		c.close();
-		db.close();
-
 		return hosts;
 	}
 
 	/**
+	 * @param c
+	 * @return
+	 */
+	private HostBean getFirstHostBean(Cursor c) {
+		HostBean host = null;
+
+		List<HostBean> hosts = createHostBeans(c);
+		if (hosts.size() > 0)
+			host = hosts.get(0);
+
+		c.close();
+
+		return host;
+	}
+
+	/**
 	 * @param nickname
+	 * @param protocol
 	 * @param username
 	 * @param hostname
+	 * @param hostname2
 	 * @param port
 	 * @return
 	 */
-	public HostBean findHost(String nickname, String username, String hostname,
-			int port) {
+	public HostBean findHost(String nickname, String protocol, String username, String hostname, int port) {
 		SQLiteDatabase db = this.getReadableDatabase();
 
 		Cursor c = db.query(TABLE_HOSTS, null,
 				FIELD_HOST_NICKNAME + " = ? AND " +
-					FIELD_HOST_USERNAME + " = ? AND " +
+					FIELD_HOST_PROTOCOL + " = ? AND " +
+					"(" + FIELD_HOST_USERNAME + " = ? OR " + FIELD_HOST_USERNAME + " IS NULL) AND " +
 					FIELD_HOST_HOSTNAME + " = ? AND " +
 					FIELD_HOST_PORT + " = ?",
-				new String[] { nickname, username, hostname, String.valueOf(port) },
+				new String[] { nickname, protocol, username, hostname, String.valueOf(port) },
 				null, null, null);
 
-		HostBean host = null;
-
-		if (c != null) {
-			if (c.moveToFirst())
-				host = createHostBean(c);
-
-			c.close();
-		}
+		HostBean host = getFirstHostBean(c);
 
 		db.close();
 
@@ -297,36 +325,9 @@ public class HostDatabase extends SQLiteOpenHelper {
 				"_id = ?", new String[] { String.valueOf(hostId) },
 				null, null, null);
 
-		HostBean host = null;
-
-		if (c != null) {
-			if (c.moveToFirst())
-				host = createHostBean(c);
-
-			c.close();
-		}
+		HostBean host = getFirstHostBean(c);
 
 		db.close();
-
-		return host;
-	}
-
-	private HostBean createHostBean(Cursor c) {
-		HostBean host = new HostBean();
-
-		host.setId(c.getLong(c.getColumnIndexOrThrow("_id")));
-		host.setNickname(c.getString(c.getColumnIndexOrThrow(FIELD_HOST_NICKNAME)));
-		host.setUsername(c.getString(c.getColumnIndexOrThrow(FIELD_HOST_USERNAME)));
-		host.setHostname(c.getString(c.getColumnIndexOrThrow(FIELD_HOST_HOSTNAME)));
-		host.setPort(c.getInt(c.getColumnIndexOrThrow(FIELD_HOST_PORT)));
-		host.setLastConnect(c.getLong(c.getColumnIndexOrThrow(FIELD_HOST_LASTCONNECT)));
-		host.setColor(c.getString(c.getColumnIndexOrThrow(FIELD_HOST_COLOR)));
-		host.setUseKeys(Boolean.valueOf(c.getString(c.getColumnIndexOrThrow(FIELD_HOST_USEKEYS))));
-		host.setPostLogin(c.getString(c.getColumnIndexOrThrow(FIELD_HOST_POSTLOGIN)));
-		host.setPubkeyId(c.getLong(c.getColumnIndexOrThrow(FIELD_HOST_PUBKEYID)));
-		host.setWantSession(Boolean.valueOf(c.getString(c.getColumnIndexOrThrow(FIELD_HOST_WANTSESSION))));
-		host.setCompression(Boolean.valueOf(c.getString(c.getColumnIndexOrThrow(FIELD_HOST_COMPRESSION))));
-		host.setEncoding(c.getString(c.getColumnIndexOrThrow(FIELD_HOST_ENCODING)));
 
 		return host;
 	}

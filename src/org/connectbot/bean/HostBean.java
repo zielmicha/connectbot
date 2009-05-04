@@ -34,6 +34,7 @@ public class HostBean extends AbstractBean {
 	private String username = null;
 	private String hostname = null;
 	private int port = 22;
+	private String protocol = "ssh";
 	private String hostKeyAlgo = null;
 	private byte[] hostKey = null;
 	private long lastConnect = -1;
@@ -54,8 +55,9 @@ public class HostBean extends AbstractBean {
 		return BEAN_NAME;
 	}
 
-	public HostBean(String nickname, String username, String hostname, int port) {
+	public HostBean(String nickname, String protocol, String username, String hostname, int port) {
 		this.nickname = nickname;
+		this.protocol = protocol;
 		this.username = username;
 		this.hostname = hostname;
 		this.port = port;
@@ -91,6 +93,15 @@ public class HostBean extends AbstractBean {
 	public int getPort() {
 		return port;
 	}
+
+	public void setProtocol(String protocol) {
+		this.protocol = protocol;
+	}
+
+	public String getProtocol() {
+		return protocol;
+	}
+
 	public void setHostKeyAlgo(String hostKeyAlgo) {
 		this.hostKeyAlgo = hostKeyAlgo;
 	}
@@ -174,6 +185,7 @@ public class HostBean extends AbstractBean {
 		ContentValues values = new ContentValues();
 
 		values.put(HostDatabase.FIELD_HOST_NICKNAME, nickname);
+		values.put(HostDatabase.FIELD_HOST_PROTOCOL, protocol);
 		values.put(HostDatabase.FIELD_HOST_USERNAME, username);
 		values.put(HostDatabase.FIELD_HOST_HOSTNAME, hostname);
 		values.put(HostDatabase.FIELD_HOST_PORT, port);
@@ -193,7 +205,7 @@ public class HostBean extends AbstractBean {
 
 	@Override
 	public boolean equals(Object o) {
-		if (!(o instanceof HostBean))
+		if (o == null || !(o instanceof HostBean))
 			return false;
 
 		HostBean host = (HostBean)o;
@@ -205,6 +217,12 @@ public class HostBean extends AbstractBean {
 			if (host.getNickname() != null)
 				return false;
 		} else if (!nickname.equals(host.getNickname()))
+			return false;
+
+		if (protocol == null) {
+			if (host.getProtocol() != null)
+				return false;
+		} else if (!protocol.equals(host.getProtocol()))
 			return false;
 
 		if (username == null) {
@@ -233,6 +251,7 @@ public class HostBean extends AbstractBean {
 			return (int)id;
 
 		hash = 31 * hash + (null == nickname ? 0 : nickname.hashCode());
+		hash = 31 * hash + (null == protocol ? 0 : protocol.hashCode());
 		hash = 31 * hash + (null == username ? 0 : username.hashCode());
 		hash = 31 * hash + (null == hostname ? 0 : hostname.hashCode());
 		hash = 31 * hash + port;

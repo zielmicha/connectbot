@@ -127,7 +127,7 @@ public class ConsoleActivity extends Activity {
 			// If we didn't find the requested connection, try opening it
 			if(!found) {
 				try {
-					Log.d(TAG, String.format("We couldnt find an existing bridge with URI=%s, so creating one now", requested.toString()));
+					Log.d(TAG, String.format("We couldnt find an existing bridge with URI=%s (nickname=%s), so creating one now", requested.toString(), requestedNickname));
 					bound.openConnection(requested);
 				} catch(Exception e) {
 					Log.e(TAG, "Problem while trying to create new requested bridge from URI", e);
@@ -561,12 +561,10 @@ public class ConsoleActivity extends Activity {
 
 		final View view = findCurrentView(R.id.console_flip);
 		final boolean activeTerminal = (view instanceof TerminalView);
-		boolean authenticated = false;
 		boolean sessionOpen = false;
 		boolean disconnected = false;
 
 		if (activeTerminal) {
-			authenticated = ((TerminalView) view).bridge.isAuthenticated();
 			sessionOpen = ((TerminalView) view).bridge.isSessionOpen();
 			disconnected = ((TerminalView) view).bridge.isDisconnected();
 		}
@@ -611,7 +609,7 @@ public class ConsoleActivity extends Activity {
 
 		paste = menu.add(R.string.console_menu_paste);
 		paste.setIcon(android.R.drawable.ic_menu_edit);
-		paste.setEnabled(clipboard.hasText() && activeTerminal && authenticated);
+		paste.setEnabled(clipboard.hasText() && sessionOpen);
 		paste.setOnMenuItemClickListener(new OnMenuItemClickListener() {
 			public boolean onMenuItemClick(MenuItem item) {
 				// force insert of clipboard text into current console
@@ -628,7 +626,7 @@ public class ConsoleActivity extends Activity {
 
 		portForward = menu.add(R.string.console_menu_portforwards);
 		portForward.setIcon(android.R.drawable.ic_menu_manage);
-		portForward.setEnabled(authenticated);
+		portForward.setEnabled(sessionOpen);
 		portForward.setOnMenuItemClickListener(new OnMenuItemClickListener() {
 			public boolean onMenuItemClick(MenuItem item) {
 				Intent intent = new Intent(ConsoleActivity.this, PortForwardListActivity.class);
@@ -640,7 +638,7 @@ public class ConsoleActivity extends Activity {
 
 		resize = menu.add(R.string.console_menu_resize);
 		resize.setIcon(android.R.drawable.ic_menu_crop);
-		resize.setEnabled(activeTerminal && sessionOpen);
+		resize.setEnabled(sessionOpen);
 		resize.setOnMenuItemClickListener(new OnMenuItemClickListener() {
 			public boolean onMenuItemClick(MenuItem item) {
 				final TerminalView terminal = (TerminalView)view;
@@ -670,11 +668,9 @@ public class ConsoleActivity extends Activity {
 
 		final View view = findCurrentView(R.id.console_flip);
 		boolean activeTerminal = (view instanceof TerminalView);
-		boolean authenticated = false;
 		boolean sessionOpen = false;
 		boolean disconnected = false;
 		if (activeTerminal) {
-			authenticated = ((TerminalView)view).bridge.isAuthenticated();
 			sessionOpen = ((TerminalView)view).bridge.isSessionOpen();
 			disconnected = ((TerminalView)view).bridge.isDisconnected();
 		}
@@ -685,9 +681,9 @@ public class ConsoleActivity extends Activity {
 		else
 			disconnect.setTitle(R.string.console_menu_close);
 		copy.setEnabled(activeTerminal);
-		paste.setEnabled(clipboard.hasText() && activeTerminal && sessionOpen);
-		portForward.setEnabled(activeTerminal && authenticated);
-		resize.setEnabled(activeTerminal && sessionOpen);
+		paste.setEnabled(clipboard.hasText() && sessionOpen);
+		portForward.setEnabled(sessionOpen);
+		resize.setEnabled(sessionOpen);
 
 		return true;
 	}
