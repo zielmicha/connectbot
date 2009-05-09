@@ -35,7 +35,6 @@ import java.security.interfaces.DSAParams;
 import java.security.interfaces.DSAPrivateKey;
 import java.security.interfaces.DSAPublicKey;
 import java.security.interfaces.RSAPrivateCrtKey;
-import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.DSAPublicKeySpec;
 import java.security.spec.InvalidKeySpecException;
@@ -58,9 +57,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 import android.util.Log;
 
-import com.trilead.ssh2.crypto.Base64;
-import com.trilead.ssh2.signature.DSASHA1Verify;
-import com.trilead.ssh2.signature.RSASHA1Verify;
+import com.jcraft.jsch.Util;
 
 public class PubkeyUtils {
 	public static final String PKCS8_START = "-----BEGIN PRIVATE KEY-----";
@@ -213,35 +210,35 @@ public class PubkeyUtils {
 	 * Trilead compatibility methods
 	 */
 
-	public static Object convertToTrilead(PublicKey pk) {
-		if (pk instanceof RSAPublicKey) {
-			return new com.trilead.ssh2.signature.RSAPublicKey(
-					((RSAPublicKey) pk).getPublicExponent(),
-					((RSAPublicKey) pk).getModulus());
-		} else if (pk instanceof DSAPublicKey) {
-			DSAParams dp = ((DSAPublicKey) pk).getParams();
-			return new com.trilead.ssh2.signature.DSAPublicKey(
-						dp.getP(), dp.getQ(), dp.getG(), ((DSAPublicKey) pk).getY());
-		}
-
-		throw new IllegalArgumentException("PublicKey is not RSA or DSA format");
-	}
-
-	public static Object convertToTrilead(PrivateKey priv, PublicKey pub) {
-		if (priv instanceof RSAPrivateKey) {
-			return new com.trilead.ssh2.signature.RSAPrivateKey(
-					((RSAPrivateKey) priv).getPrivateExponent(),
-					((RSAPublicKey) pub).getPublicExponent(),
-					((RSAPrivateKey) priv).getModulus());
-		} else if (priv instanceof DSAPrivateKey) {
-			DSAParams dp = ((DSAPrivateKey) priv).getParams();
-			return new com.trilead.ssh2.signature.DSAPrivateKey(
-						dp.getP(), dp.getQ(), dp.getG(), ((DSAPublicKey) pub).getY(),
-						((DSAPrivateKey) priv).getX());
-		}
-
-		throw new IllegalArgumentException("Key is not RSA or DSA format");
-	}
+//	public static Object convertToTrilead(PublicKey pk) {
+//		if (pk instanceof RSAPublicKey) {
+//			return new com.trilead.ssh2.signature.RSAPublicKey(
+//					((RSAPublicKey) pk).getPublicExponent(),
+//					((RSAPublicKey) pk).getModulus());
+//		} else if (pk instanceof DSAPublicKey) {
+//			DSAParams dp = ((DSAPublicKey) pk).getParams();
+//			return new com.trilead.ssh2.signature.DSAPublicKey(
+//						dp.getP(), dp.getQ(), dp.getG(), ((DSAPublicKey) pk).getY());
+//		}
+//
+//		throw new IllegalArgumentException("PublicKey is not RSA or DSA format");
+//	}
+//
+//	public static Object convertToTrilead(PrivateKey priv, PublicKey pub) {
+//		if (priv instanceof RSAPrivateKey) {
+//			return new com.trilead.ssh2.signature.RSAPrivateKey(
+//					((RSAPrivateKey) priv).getPrivateExponent(),
+//					((RSAPublicKey) pub).getPublicExponent(),
+//					((RSAPrivateKey) priv).getModulus());
+//		} else if (priv instanceof DSAPrivateKey) {
+//			DSAParams dp = ((DSAPrivateKey) priv).getParams();
+//			return new com.trilead.ssh2.signature.DSAPrivateKey(
+//						dp.getP(), dp.getQ(), dp.getG(), ((DSAPublicKey) pub).getY(),
+//						((DSAPrivateKey) priv).getX());
+//		}
+//
+//		throw new IllegalArgumentException("Key is not RSA or DSA format");
+//	}
 
 	/*
 	 * OpenSSH compatibility methods
@@ -254,13 +251,15 @@ public class PubkeyUtils {
 
 		if (pk instanceof RSAPublicKey) {
 			String data = "ssh-rsa ";
-			data += String.valueOf(Base64.encode(RSASHA1Verify.encodeSSHRSAPublicKey(
-					(com.trilead.ssh2.signature.RSAPublicKey)convertToTrilead(pk))));
+//			TODO FIX THIS BEFORE RELEASE
+//			data += String.valueOf(Base64.encode(RSASHA1Verify.encodeSSHRSAPublicKey(
+//					(com.trilead.ssh2.signature.RSAPublicKey)convertToTrilead(pk))));
 			return data + " " + nickname;
 		} else if (pk instanceof DSAPublicKey) {
 			String data = "ssh-dss ";
-			data += String.valueOf(Base64.encode(DSASHA1Verify.encodeSSHDSAPublicKey(
-					(com.trilead.ssh2.signature.DSAPublicKey)convertToTrilead(pk))));
+//			TODO FIX THIS BEFORE RELEASE
+//			data += String.valueOf(Base64.encode(DSASHA1Verify.encodeSSHDSAPublicKey(
+//					(com.trilead.ssh2.signature.DSAPublicKey)convertToTrilead(pk))));
 			return data + " " + nickname;
 		}
 
@@ -304,7 +303,7 @@ public class PubkeyUtils {
 		}
 
 		int i = sb.length();
-		sb.append(Base64.encode(data));
+		sb.append(Util.toBase64(data, 0, data.length));
 		for (i += 63; i < sb.length(); i += 64) {
 			sb.insert(i, "\n");
 		}

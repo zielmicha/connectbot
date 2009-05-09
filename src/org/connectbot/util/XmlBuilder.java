@@ -17,7 +17,7 @@
 */
 package org.connectbot.util;
 
-import com.trilead.ssh2.crypto.Base64;
+import com.jcraft.jsch.Util;
 
 /**
  * @author Kenny Root
@@ -50,21 +50,26 @@ public class XmlBuilder {
 				}
 			}
 
-			sb.append(String.format("<%s>%s</%s>", field,
-					binary ? new String(Base64.encode(input.getBytes())) : input, field));
+			if (binary) {
+				byte[] val = input.getBytes();
+				input = new String(Util.toBase64(val, 0, val.length));
+			}
+			sb.append(String.format("<%s>%s</%s>", field, input, field));
 		} else if (data instanceof Integer) {
-			sb.append(String.format("<%s>%d</%s>", field, (Integer) data, field));
+			sb.append(String.format("<%s>%d</%s>", field, data, field));
 		} else if (data instanceof Long) {
-			sb.append(String.format("<%s>%d</%s>", field, (Long) data, field));
+			sb.append(String.format("<%s>%d</%s>", field, data, field));
 		} else if (data instanceof byte[]) {
-			sb.append(String.format("<%s>%s</%s>", field, new String(Base64.encode((byte[]) data)), field));
+			byte[] val = (byte[]) data;
+			sb.append(String.format("<%s>%s</%s>", field, new String(Util.toBase64(val, 0, val.length)), field));
 		} else if (data instanceof Boolean) {
-			sb.append(String.format("<%s>%s</%s>", field, (Boolean) data, field));
+			sb.append(String.format("<%s>%s</%s>", field, data, field));
 		}
 
 		return this;
 	}
 
+	@Override
 	public String toString() {
 		return sb.toString();
 	}

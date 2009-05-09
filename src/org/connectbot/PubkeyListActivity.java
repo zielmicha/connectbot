@@ -21,7 +21,6 @@ package org.connectbot;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyPair;
 import java.security.PrivateKey;
@@ -67,9 +66,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.AdapterView.OnItemClickListener;
 
-import com.trilead.ssh2.crypto.Base64;
-import com.trilead.ssh2.crypto.PEMDecoder;
-import com.trilead.ssh2.crypto.PEMStructure;
+import com.jcraft.jsch.Util;
 
 /**
  * List public keys in database by nickname and describe their properties. Allow users to import,
@@ -250,9 +247,9 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 									int end = data.indexOf(PubkeyUtils.PKCS8_END);
 
 									if (end > start) {
-										char[] encoded = data.substring(start, end - 1).toCharArray();
+										byte[] encoded = data.substring(start, end - 1).getBytes();
 										Log.d(TAG, "encoded: " + new String(encoded));
-										byte[] decoded = Base64.decode(encoded);
+										byte[] decoded = Util.fromBase64(encoded, 0, encoded.length);
 
 										KeyPair kp = PubkeyUtils.recoverKeyPair(decoded);
 
@@ -266,10 +263,11 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 												Toast.LENGTH_LONG).show();
 									}
 								} else {
-									PEMStructure struct = PEMDecoder.parsePEM(new String(raw).toCharArray());
-									pubkey.setEncrypted(PEMDecoder.isPEMEncrypted(struct));
-									pubkey.setType(PubkeyDatabase.KEY_TYPE_IMPORTED);
-									pubkey.setPrivateKey(raw);
+									// TODO FIX BEFORE RELEASE
+//									PEMStructure struct = PEMDecoder.parsePEM(new String(raw).toCharArray());
+//									pubkey.setEncrypted(PEMDecoder.isPEMEncrypted(struct));
+//									pubkey.setType(PubkeyDatabase.KEY_TYPE_IMPORTED);
+//									pubkey.setPrivateKey(raw);
 								}
 
 								// write new value into database
@@ -313,7 +311,8 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 		if(PubkeyDatabase.KEY_TYPE_IMPORTED.equals(pubkey.getType())) {
 			// load specific key using pem format
 			try {
-				trileadKey = PEMDecoder.decode(new String(pubkey.getPrivateKey()).toCharArray(), password);
+//				 TODO FIX BEFORE RELEASE
+//				trileadKey = PEMDecoder.decode(new String(pubkey.getPrivateKey()).toCharArray(), password);
 			} catch(Exception e) {
 				String message = getResources().getString(R.string.pubkey_failed_add, pubkey.getNickname());
 				Log.e(TAG, message, e);
@@ -335,8 +334,9 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 			}
 
 			// convert key to trilead format
-			trileadKey = PubkeyUtils.convertToTrilead(privKey, pubKey);
-			Log.d(TAG, "Unlocked key " + PubkeyUtils.formatKey(pubKey));
+//			TODO FIX BEFORE RELEASE
+//			trileadKey = PubkeyUtils.convertToTrilead(privKey, pubKey);
+//			Log.d(TAG, "Unlocked key " + PubkeyUtils.formatKey(pubKey));
 		}
 
 		if(trileadKey == null) return;
@@ -532,6 +532,7 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 			this.pubkeys = pubkeys;
 		}
 
+		@Override
 		public View getView(int position, View origView, ViewGroup parent) {
 			View view = origView;
 			if (view == null)
@@ -547,13 +548,14 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 			boolean imported = PubkeyDatabase.KEY_TYPE_IMPORTED.equals(pubkey.getType());
 
 			if (imported) {
-				try {
-					PEMStructure struct = PEMDecoder.parsePEM(new String(pubkey.getPrivateKey()).toCharArray());
-					String type = (struct.pemType == PEMDecoder.PEM_RSA_PRIVATE_KEY) ? "RSA" : "DSA";
-					caption.setText(String.format("%s unknown-bit", type));
-				} catch (IOException e) {
-					Log.e(TAG, "Error decoding IMPORTED public key at " + pubkey.getId(), e);
-				}
+//				try {
+//					TODO FIX BEFORE RELEASE
+//					PEMStructure struct = PEMDecoder.parsePEM(new String(pubkey.getPrivateKey()).toCharArray());
+//					String type = (struct.pemType == PEMDecoder.PEM_RSA_PRIVATE_KEY) ? "RSA" : "DSA";
+//					caption.setText(String.format("%s unknown-bit", type));
+//				} catch (IOException e) {
+//					Log.e(TAG, "Error decoding IMPORTED public key at " + pubkey.getId(), e);
+//				}
 			} else {
 				try {
 					PublicKey pub = PubkeyUtils.decodePublic(pubkey.getPublicKey(), pubkey.getType());

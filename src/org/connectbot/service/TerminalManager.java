@@ -108,9 +108,10 @@ public class TerminalManager extends Service implements BridgeDisconnectedListen
 			try {
 				PrivateKey privKey = PubkeyUtils.decodePrivate(pubkey.getPrivateKey(), pubkey.getType());
 				PublicKey pubKey = PubkeyUtils.decodePublic(pubkey.getPublicKey(), pubkey.getType());
-				Object trileadKey = PubkeyUtils.convertToTrilead(privKey, pubKey);
-
-				loadedPubkeys.put(pubkey.getNickname(), trileadKey);
+//				TODO FIX BEFORE RELEASE
+//				Object trileadKey = PubkeyUtils.convertToTrilead(privKey, pubKey);
+//
+//				loadedPubkeys.put(pubkey.getNickname(), trileadKey);
 				Log.d(TAG, String.format("Added key '%s' to in-memory cache", pubkey.getNickname()));
 			} catch (Exception e) {
 				Log.d(TAG, String.format("Problem adding key '%s' to in-memory cache", pubkey.getNickname()), e);

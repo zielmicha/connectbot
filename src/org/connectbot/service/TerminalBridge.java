@@ -51,9 +51,6 @@ import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.View.OnKeyListener;
-
-import com.trilead.ssh2.InteractiveCallback;
-
 import de.mud.terminal.VDUBuffer;
 import de.mud.terminal.VDUDisplay;
 import de.mud.terminal.vt320;
@@ -68,7 +65,7 @@ import de.mud.terminal.vt320;
  * This class also provides SSH hostkey verification prompting, and password
  * prompting.
  */
-public class TerminalBridge implements VDUDisplay, OnKeyListener, InteractiveCallback {
+public class TerminalBridge implements VDUDisplay, OnKeyListener {
 
 	public final static String TAG = TerminalBridge.class.toString();
 

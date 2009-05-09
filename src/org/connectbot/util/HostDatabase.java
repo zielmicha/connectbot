@@ -31,8 +31,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
 
-import com.trilead.ssh2.KnownHosts;
-
 /**
  * Contains information about various SSH hosts, include public hostkey if known
  * from previous sessions.
@@ -358,43 +356,43 @@ public class HostDatabase extends SQLiteOpenHelper {
 	 * Build list of known hosts for Trilead library.
 	 * @return
 	 */
-	public KnownHosts getKnownHosts() {
-		KnownHosts known = new KnownHosts();
-
-		SQLiteDatabase db = this.getReadableDatabase();
-		Cursor c = db.query(TABLE_HOSTS, new String[] { FIELD_HOST_HOSTNAME,
-				FIELD_HOST_PORT, FIELD_HOST_HOSTKEYALGO, FIELD_HOST_HOSTKEY },
-				null, null, null, null, null);
-
-		if (c != null) {
-			int COL_HOSTNAME = c.getColumnIndexOrThrow(FIELD_HOST_HOSTNAME),
-				COL_PORT = c.getColumnIndexOrThrow(FIELD_HOST_PORT),
-				COL_HOSTKEYALGO = c.getColumnIndexOrThrow(FIELD_HOST_HOSTKEYALGO),
-				COL_HOSTKEY = c.getColumnIndexOrThrow(FIELD_HOST_HOSTKEY);
-
-			while (c.moveToNext()) {
-				String hostname = c.getString(COL_HOSTNAME),
-					hostkeyalgo = c.getString(COL_HOSTKEYALGO);
-				int port = c.getInt(COL_PORT);
-				byte[] hostkey = c.getBlob(COL_HOSTKEY);
-
-				if (hostkeyalgo == null || hostkeyalgo.length() == 0) continue;
-				if (hostkey == null || hostkey.length == 0) continue;
-
-				try {
-					known.addHostkey(new String[] { String.format("%s:%d", hostname, port) }, hostkeyalgo, hostkey);
-				} catch(Exception e) {
-					Log.e(TAG, "Problem while adding a known host from database", e);
-				}
-			}
-
-			c.close();
-		}
-
-		db.close();
-
-		return known;
-	}
+//	public KnownHosts getKnownHosts() {
+//		KnownHosts known = new KnownHosts();
+//
+//		SQLiteDatabase db = this.getReadableDatabase();
+//		Cursor c = db.query(TABLE_HOSTS, new String[] { FIELD_HOST_HOSTNAME,
+//				FIELD_HOST_PORT, FIELD_HOST_HOSTKEYALGO, FIELD_HOST_HOSTKEY },
+//				null, null, null, null, null);
+//
+//		if (c != null) {
+//			int COL_HOSTNAME = c.getColumnIndexOrThrow(FIELD_HOST_HOSTNAME),
+//				COL_PORT = c.getColumnIndexOrThrow(FIELD_HOST_PORT),
+//				COL_HOSTKEYALGO = c.getColumnIndexOrThrow(FIELD_HOST_HOSTKEYALGO),
+//				COL_HOSTKEY = c.getColumnIndexOrThrow(FIELD_HOST_HOSTKEY);
+//
+//			while (c.moveToNext()) {
+//				String hostname = c.getString(COL_HOSTNAME),
+//					hostkeyalgo = c.getString(COL_HOSTKEYALGO);
+//				int port = c.getInt(COL_PORT);
+//				byte[] hostkey = c.getBlob(COL_HOSTKEY);
+//
+//				if (hostkeyalgo == null || hostkeyalgo.length() == 0) continue;
+//				if (hostkey == null || hostkey.length == 0) continue;
+//
+//				try {
+//					known.addHostkey(new String[] { String.format("%s:%d", hostname, port) }, hostkeyalgo, hostkey);
+//				} catch(Exception e) {
+//					Log.e(TAG, "Problem while adding a known host from database", e);
+//				}
+//			}
+//
+//			c.close();
+//		}
+//
+//		db.close();
+//
+//		return known;
+//	}
 
 	/**
 	 * Unset any hosts using a pubkey ID that has been deleted.
