@@ -12,8 +12,8 @@ import java.lang.reflect.Method;
 import org.connectbot.bean.HostBean;
 import org.connectbot.service.TerminalBridge;
 import org.connectbot.service.TerminalManager;
+import org.connectbot.R;
 
-import android.R;
 import android.util.Log;
 
 /**
@@ -98,7 +98,7 @@ public class Local extends AbsTransport {
 			try {
 				shellFd = (FileDescriptor)mExec_openSubprocess.invoke(null, "/system/bin/sh", "-", null, pids);
 			} catch (Exception e) {
-				bridge.outputLine(R.string.local_shell_unavailable);
+				bridge.outputLine(manager.res.getString(R.string.local_shell_unavailable));
 				return;
 			}
 
