@@ -512,25 +512,25 @@ public class TerminalBridge implements VDUDisplay, OnKeyListener, InteractiveCal
 				if ("Use right-side keys".equals(keymode)) {
 					if (keyCode == KeyEvent.KEYCODE_ALT_RIGHT
 							&& (metaState & META_SLASH) != 0) {
-						metaState &= ~META_SLASH & ~META_TRANSIENT;
-						transport.write('/');
+						metaState &= ~(META_SLASH | META_TRANSIENT);
+						stdin.write('/');
 						return true;
 					} else if (keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT
 							&& (metaState & META_TAB) != 0) {
-						metaState &= ~META_TAB & ~META_TRANSIENT;
-						transport.write('\011');
+						metaState &= ~(META_TAB | META_TRANSIENT);
+						stdin.write(0x09);
 						return true;
 					}
 				} else if ("Use left-side keys".equals(keymode)) {
 					if (keyCode == KeyEvent.KEYCODE_ALT_LEFT
 							&& (metaState & META_SLASH) != 0) {
-						metaState &= ~META_SLASH & ~META_TRANSIENT;
-						transport.write('/');
+						metaState &= ~(META_SLASH | META_TRANSIENT);
+						stdin.write('/');
 						return true;
 					} else if (keyCode == KeyEvent.KEYCODE_SHIFT_LEFT
 							&& (metaState & META_TAB) != 0) {
-						metaState &= ~META_TAB & ~META_TRANSIENT;
-						transport.write('\011');
+						metaState &= ~(META_TAB | META_TRANSIENT);
+						stdin.write(0x09);
 						return true;
 					}
 				}
@@ -564,7 +564,7 @@ public class TerminalBridge implements VDUDisplay, OnKeyListener, InteractiveCal
 			if (printing) {
 				int curMetaState = event.getMetaState();
 
-				metaState &= ~META_SLASH & ~META_TAB;
+				metaState &= ~(META_SLASH | META_TAB);
 
 				if ((metaState & META_SHIFT_MASK) != 0) {
 					curMetaState |= KeyEvent.META_SHIFT_ON;
@@ -611,44 +611,57 @@ public class TerminalBridge implements VDUDisplay, OnKeyListener, InteractiveCal
 					}
 				}
 
-				transport.write(key);
+				if (key < 0x80)
+					stdin.write(key);
+				else
+					// TODO write encoding routine that doesn't allocate each time
+					stdin.write(new String(Character.toChars(key))
+							.getBytes(host.getEncoding()));
 				return true;
 			}
 
+			if (keyCode == KeyEvent.KEYCODE_UNKNOWN &&
+					event.getAction() == KeyEvent.ACTION_MULTIPLE) {
+				byte[] input = event.getCharacters().getBytes(host.getEncoding());
+				stdin.write(input);
+			}
+
 			// try handling keymode shortcuts
-			if("Use right-side keys".equals(keymode)) {
-				switch(keyCode) {
-				case KeyEvent.KEYCODE_ALT_RIGHT:
-					metaState |= META_SLASH;
-					return true;
-				case KeyEvent.KEYCODE_SHIFT_RIGHT:
-					metaState |= META_TAB;
-					return true;
-				case KeyEvent.KEYCODE_SHIFT_LEFT:
-					metaPress(META_SHIFT_ON);
-					return true;
-				case KeyEvent.KEYCODE_ALT_LEFT:
-					metaPress(META_ALT_ON);
-					return true;
-				default:
-					break;
-				}
-			} else if("Use left-side keys".equals(keymode)) {
-				switch(keyCode) {
-				case KeyEvent.KEYCODE_ALT_LEFT:
-					metaState |= META_SLASH;
-					return true;
-				case KeyEvent.KEYCODE_SHIFT_LEFT:
-					metaState |= META_TAB;
-					return true;
-				case KeyEvent.KEYCODE_SHIFT_RIGHT:
-					metaPress(META_SHIFT_ON);
-					return true;
-				case KeyEvent.KEYCODE_ALT_RIGHT:
-					metaPress(META_ALT_ON);
-					return true;
-				default:
-					break;
+			if (event.getRepeatCount() == 0) {
+				if ("Use right-side keys".equals(keymode)) {
+					switch(keyCode) {
+					case KeyEvent.KEYCODE_ALT_RIGHT:
+						metaState |= META_SLASH;
+						return true;
+					case KeyEvent.KEYCODE_SHIFT_RIGHT:
+						metaState |= META_TAB;
+						return true;
+					case KeyEvent.KEYCODE_SHIFT_LEFT:
+						metaPress(META_SHIFT_ON);
+						return true;
+					case KeyEvent.KEYCODE_ALT_LEFT:
+						metaPress(META_ALT_ON);
+						return true;
+					default:
+						break;
+					}
+				} else if ("Use left-side keys".equals(keymode)) {
+					switch(keyCode) {
+					case KeyEvent.KEYCODE_ALT_LEFT:
+						metaState |= META_SLASH;
+						return true;
+					case KeyEvent.KEYCODE_SHIFT_LEFT:
+						metaState |= META_TAB;
+						return true;
+					case KeyEvent.KEYCODE_SHIFT_RIGHT:
+						metaPress(META_SHIFT_ON);
+						return true;
+					case KeyEvent.KEYCODE_ALT_RIGHT:
+						metaPress(META_ALT_ON);
+						return true;
+					default:
+						break;
+					}
 				}
 			}
 
