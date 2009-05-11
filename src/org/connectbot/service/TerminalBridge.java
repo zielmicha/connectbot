@@ -473,7 +473,8 @@ public class TerminalBridge implements VDUDisplay, OnKeyListener, InteractiveCal
 		} else {
 			new Thread(new Runnable() {
 				public void run() {
-					Boolean result = promptHelper.requestBooleanPrompt("Host has disconnected.\nClose session?", true);
+					Boolean result = promptHelper.requestBooleanPrompt(
+							manager.res.getString(R.string.prompt_host_disconnected), true);
 					if (result == null || result.booleanValue()) {
 						awaitingClose = true;
 
@@ -513,24 +514,24 @@ public class TerminalBridge implements VDUDisplay, OnKeyListener, InteractiveCal
 					if (keyCode == KeyEvent.KEYCODE_ALT_RIGHT
 							&& (metaState & META_SLASH) != 0) {
 						metaState &= ~(META_SLASH | META_TRANSIENT);
-						stdin.write('/');
+						transport.write('/');
 						return true;
 					} else if (keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT
 							&& (metaState & META_TAB) != 0) {
 						metaState &= ~(META_TAB | META_TRANSIENT);
-						stdin.write(0x09);
+						transport.write(0x09);
 						return true;
 					}
 				} else if ("Use left-side keys".equals(keymode)) {
 					if (keyCode == KeyEvent.KEYCODE_ALT_LEFT
 							&& (metaState & META_SLASH) != 0) {
 						metaState &= ~(META_SLASH | META_TRANSIENT);
-						stdin.write('/');
+						transport.write('/');
 						return true;
 					} else if (keyCode == KeyEvent.KEYCODE_SHIFT_LEFT
 							&& (metaState & META_TAB) != 0) {
 						metaState &= ~(META_TAB | META_TRANSIENT);
-						stdin.write(0x09);
+						transport.write(0x09);
 						return true;
 					}
 				}
@@ -612,10 +613,10 @@ public class TerminalBridge implements VDUDisplay, OnKeyListener, InteractiveCal
 				}
 
 				if (key < 0x80)
-					stdin.write(key);
+					transport.write(key);
 				else
 					// TODO write encoding routine that doesn't allocate each time
-					stdin.write(new String(Character.toChars(key))
+					transport.write(new String(Character.toChars(key))
 							.getBytes(host.getEncoding()));
 				return true;
 			}
@@ -623,7 +624,7 @@ public class TerminalBridge implements VDUDisplay, OnKeyListener, InteractiveCal
 			if (keyCode == KeyEvent.KEYCODE_UNKNOWN &&
 					event.getAction() == KeyEvent.ACTION_MULTIPLE) {
 				byte[] input = event.getCharacters().getBytes(host.getEncoding());
-				stdin.write(input);
+				transport.write(input);
 			}
 
 			// try handling keymode shortcuts

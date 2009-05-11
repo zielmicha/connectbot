@@ -10,6 +10,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -119,10 +120,10 @@ public class SSH extends AbsTransport implements ConnectionMonitor {
 
 			case KnownHosts.HOSTKEY_IS_NEW:
 				// prompt user
-				bridge.outputLine(String.format("The authenticity of host '%s' can't be established.", hostname));
-				bridge.outputLine(String.format("Host %s key fingerprint is %s", algorithmName, fingerprint));
+				bridge.outputLine(String.format(manager.res.getString(R.string.host_authenticity_warning), hostname));
+				bridge.outputLine(String.format(manager.res.getString(R.string.host_fingerprint), algorithmName, fingerprint));
 
-				result = bridge.getPromptHelper().requestBooleanPrompt("Are you sure you want\nto continue connecting?");
+				result = bridge.promptHelper.requestBooleanPrompt(manager.res.getString(R.string.prompt_continue_connecting));
 				if(result == null) return false;
 				if(result.booleanValue()) {
 					// save this key in known database
@@ -131,17 +132,22 @@ public class SSH extends AbsTransport implements ConnectionMonitor {
 				return result.booleanValue();
 
 			case KnownHosts.HOSTKEY_HAS_CHANGED:
-				bridge.outputLine("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
-				bridge.outputLine("@	WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!	 @");
-				bridge.outputLine("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
-				bridge.outputLine("IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!");
-				bridge.outputLine("Someone could be eavesdropping on you right now (man-in-the-middle attack)!");
-				bridge.outputLine("It is also possible that the host key has just been changed.");
-				bridge.outputLine(String.format("Host %s key fingerprint is %s",
+				String header = String.format("@   %s   @",
+						manager.res.getString(R.string.host_verification_failure_warning_header));
+
+				char[] atsigns = new char[header.length()];
+				Arrays.fill(atsigns, '@');
+				String border = new String(atsigns);
+
+				bridge.outputLine(border);
+				bridge.outputLine(manager.res.getString(R.string.host_verification_failure_warning));
+				bridge.outputLine(border);
+
+				bridge.outputLine(String.format(manager.res.getString(R.string.host_fingerprint),
 						algorithmName, fingerprint));
 
 				// Users have no way to delete keys, so we'll prompt them for now.
-				result = bridge.getPromptHelper().requestBooleanPrompt("Are you sure you want\nto continue connecting?");
+				result = bridge.promptHelper.requestBooleanPrompt(manager.res.getString(R.string.prompt_continue_connecting));
 				if(result == null) return false;
 				if(result.booleanValue()) {
 					// save this key in known database
