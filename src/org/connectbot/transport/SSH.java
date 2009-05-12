@@ -17,6 +17,7 @@ import org.connectbot.bean.HostBean;
 import org.connectbot.bean.PortForwardBean;
 import org.connectbot.service.TerminalBridge;
 import org.connectbot.service.TerminalManager;
+import org.connectbot.util.HostDatabase;
 
 import android.util.Log;
 
@@ -64,16 +65,10 @@ public class SSH extends AbsTransport implements UserInfo, UIKeyboardInteractive
 	private Connection connection;
 	private Session session;
 	private ChannelShell channel;
-//	private ConnectionInfo connectionInfo;
 
 	private OutputStream stdin;
 	private InputStream stdout;
 	private InputStream stderr;
-
-//	private static final int conditions = ChannelCondition.STDOUT_DATA
-//		| ChannelCondition.STDERR_DATA
-//		| ChannelCondition.CLOSED
-//		| ChannelCondition.EOF;
 
 	private List<PortForwardBean> portForwards = new LinkedList<PortForwardBean>();
 
@@ -311,14 +306,14 @@ public class SSH extends AbsTransport implements UserInfo, UIKeyboardInteractive
 		authenticated = true;
 
 		// Start up predefined port forwards
-//		for (PortForwardBean pfb : portForwards) {
-//			try {
-//				enablePortForward(pfb);
-//				bridge.outputLine(String.format("Enable port forward: %s", pfb.getDescription()));
-//			} catch (Exception e) {
-//				Log.e(TAG, "Error setting up port forward during connect", e);
-//			}
-//		}
+		for (PortForwardBean pfb : portForwards) {
+			try {
+				enablePortForward(pfb);
+				bridge.outputLine(String.format("Enable port forward: %s", pfb.getDescription()));
+			} catch (Exception e) {
+				Log.e(TAG, "Error setting up port forward during connect", e);
+			}
+		}
 
 		if (!host.getWantSession()) {
 			bridge.outputLine("Session will not be started due to host preference.");
@@ -341,9 +336,7 @@ public class SSH extends AbsTransport implements UserInfo, UIKeyboardInteractive
 			stdin = channel.getOutputStream();
 			stdout = channel.getInputStream();
 
-			Log.d(TAG, "stdin = " + stdin.toString());
-
-			channel.connect(3000);
+			channel.connect();
 
 			sessionOpen = true;
 
@@ -369,7 +362,7 @@ public class SSH extends AbsTransport implements UserInfo, UIKeyboardInteractive
 					session = jsch.getSession(host.getUsername(), host.getHostname(), host.getPort());
 					session.setUserInfo(SSH.this);
 
-					session.connect(3000);
+					session.connect();
 
 					connected = true;
 
@@ -540,35 +533,26 @@ public class SSH extends AbsTransport implements UserInfo, UIKeyboardInteractive
 			return false;
 		}
 
-		return true;
-//		TODO FIX BEFORE RELEASE
-//		if (HostDatabase.PORTFORWARD_LOCAL.equals(portForward.getType())) {
-//			LocalPortForwarder lpf = null;
-//			try {
-//				lpf = connection.createLocalPortForwarder(portForward.getSourcePort(), portForward.getDestAddr(), portForward.getDestPort());
-//			} catch (IOException e) {
-//				Log.e(TAG, "Could not create local port forward", e);
-//				return false;
-//			}
-//
-//			if (lpf == null) {
-//				Log.e(TAG, "returned LocalPortForwarder object is null");
-//				return false;
-//			}
-//
-//			portForward.setIdentifier(lpf);
-//			portForward.setEnabled(true);
-//			return true;
-//		} else if (HostDatabase.PORTFORWARD_REMOTE.equals(portForward.getType())) {
-//			try {
-//				connection.requestRemotePortForwarding("", portForward.getSourcePort(), portForward.getDestAddr(), portForward.getDestPort());
-//			} catch (IOException e) {
-//				Log.e(TAG, "Could not create remote port forward", e);
-//				return false;
-//			}
-//
-//			portForward.setEnabled(false);
-//			return true;
+		if (HostDatabase.PORTFORWARD_LOCAL.equals(portForward.getType())) {
+			try {
+				session.setPortForwardingL(portForward.getSourcePort(), portForward.getDestAddr(), portForward.getDestPort());
+			} catch (JSchException e) {
+				Log.e(TAG, "Could not create local port forward", e);
+				return false;
+			}
+
+			portForward.setEnabled(true);
+			return true;
+		} else if (HostDatabase.PORTFORWARD_REMOTE.equals(portForward.getType())) {
+			try {
+				session.setPortForwardingR(portForward.getSourcePort(), portForward.getDestAddr(), portForward.getDestPort());
+			} catch (JSchException e) {
+				Log.e(TAG, "Could not create remote port forward", e);
+				return false;
+			}
+
+			portForward.setEnabled(false);
+			return true;
 //		} else if (HostDatabase.PORTFORWARD_DYNAMIC5.equals(portForward.getType())) {
 //			DynamicPortForwarder dpf = null;
 //
@@ -582,11 +566,11 @@ public class SSH extends AbsTransport implements UserInfo, UIKeyboardInteractive
 //			portForward.setIdentifier(dpf);
 //			portForward.setEnabled(true);
 //			return true;
-//		} else {
-//			// Unsupported type
-//			Log.e(TAG, String.format("attempt to forward unknown type %s", portForward.getType()));
-//			return false;
-//		}
+		} else {
+			// Unsupported type
+			Log.e(TAG, String.format("attempt to forward unknown type %s", portForward.getType()));
+			return false;
+		}
 	}
 
 	/* (non-Javadoc)
@@ -738,6 +722,8 @@ public class SSH extends AbsTransport implements UserInfo, UIKeyboardInteractive
 
 	public boolean promptPassword(String message) {
 		bridge.outputLine(manager.res.getString(R.string.terminal_auth_pass));
+		if (message != null && message.length() > 0)
+			bridge.outputLine(message);
 		password = bridge.getPromptHelper().requestStringPrompt(
 				manager.res.getString(R.string.terminal_auth_pass_hint));
 		if (password != null) {
@@ -753,6 +739,8 @@ public class SSH extends AbsTransport implements UserInfo, UIKeyboardInteractive
 	 * @see com.jcraft.jsch.UserInfo#promptYesNo(java.lang.String)
 	 */
 	public boolean promptYesNo(String message) {
+		if (message != null && message.length() > 0)
+			bridge.outputLine(message);
 		Boolean result = bridge.getPromptHelper().requestBooleanPrompt("Are you sure you want\nto continue connecting?");
 		if(result == null) return false;
 		return result.booleanValue();
