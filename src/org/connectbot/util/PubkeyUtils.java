@@ -35,7 +35,6 @@ import java.security.interfaces.DSAParams;
 import java.security.interfaces.DSAPrivateKey;
 import java.security.interfaces.DSAPublicKey;
 import java.security.interfaces.RSAPrivateCrtKey;
-import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.DSAPublicKeySpec;
 import java.security.spec.InvalidKeySpecException;
@@ -57,10 +56,6 @@ import javax.crypto.spec.PBEParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 import android.util.Log;
-
-import com.trilead.ssh2.crypto.Base64;
-import com.trilead.ssh2.signature.DSASHA1Verify;
-import com.trilead.ssh2.signature.RSASHA1Verify;
 
 public class PubkeyUtils {
 	public static final String PKCS8_START = "-----BEGIN PRIVATE KEY-----";
@@ -213,59 +208,59 @@ public class PubkeyUtils {
 	 * Trilead compatibility methods
 	 */
 
-	public static Object convertToTrilead(PublicKey pk) {
-		if (pk instanceof RSAPublicKey) {
-			return new com.trilead.ssh2.signature.RSAPublicKey(
-					((RSAPublicKey) pk).getPublicExponent(),
-					((RSAPublicKey) pk).getModulus());
-		} else if (pk instanceof DSAPublicKey) {
-			DSAParams dp = ((DSAPublicKey) pk).getParams();
-			return new com.trilead.ssh2.signature.DSAPublicKey(
-						dp.getP(), dp.getQ(), dp.getG(), ((DSAPublicKey) pk).getY());
-		}
-
-		throw new IllegalArgumentException("PublicKey is not RSA or DSA format");
-	}
-
-	public static Object convertToTrilead(PrivateKey priv, PublicKey pub) {
-		if (priv instanceof RSAPrivateKey) {
-			return new com.trilead.ssh2.signature.RSAPrivateKey(
-					((RSAPrivateKey) priv).getPrivateExponent(),
-					((RSAPublicKey) pub).getPublicExponent(),
-					((RSAPrivateKey) priv).getModulus());
-		} else if (priv instanceof DSAPrivateKey) {
-			DSAParams dp = ((DSAPrivateKey) priv).getParams();
-			return new com.trilead.ssh2.signature.DSAPrivateKey(
-						dp.getP(), dp.getQ(), dp.getG(), ((DSAPublicKey) pub).getY(),
-						((DSAPrivateKey) priv).getX());
-		}
-
-		throw new IllegalArgumentException("Key is not RSA or DSA format");
-	}
+//	public static Object convertToTrilead(PublicKey pk) {
+//		if (pk instanceof RSAPublicKey) {
+//			return new com.trilead.ssh2.signature.RSAPublicKey(
+//					((RSAPublicKey) pk).getPublicExponent(),
+//					((RSAPublicKey) pk).getModulus());
+//		} else if (pk instanceof DSAPublicKey) {
+//			DSAParams dp = ((DSAPublicKey) pk).getParams();
+//			return new com.trilead.ssh2.signature.DSAPublicKey(
+//						dp.getP(), dp.getQ(), dp.getG(), ((DSAPublicKey) pk).getY());
+//		}
+//
+//		throw new IllegalArgumentException("PublicKey is not RSA or DSA format");
+//	}
+//
+//	public static Object convertToTrilead(PrivateKey priv, PublicKey pub) {
+//		if (priv instanceof RSAPrivateKey) {
+//			return new com.trilead.ssh2.signature.RSAPrivateKey(
+//					((RSAPrivateKey) priv).getPrivateExponent(),
+//					((RSAPublicKey) pub).getPublicExponent(),
+//					((RSAPrivateKey) priv).getModulus());
+//		} else if (priv instanceof DSAPrivateKey) {
+//			DSAParams dp = ((DSAPrivateKey) priv).getParams();
+//			return new com.trilead.ssh2.signature.DSAPrivateKey(
+//						dp.getP(), dp.getQ(), dp.getG(), ((DSAPublicKey) pub).getY(),
+//						((DSAPrivateKey) priv).getX());
+//		}
+//
+//		throw new IllegalArgumentException("Key is not RSA or DSA format");
+//	}
 
 	/*
 	 * OpenSSH compatibility methods
 	 */
 
-	public static String convertToOpenSSHFormat(PublicKey pk, String origNickname) throws IOException, InvalidKeyException {
-		String nickname = origNickname;
-		if (nickname == null)
-			nickname = "connectbot@android";
-
-		if (pk instanceof RSAPublicKey) {
-			String data = "ssh-rsa ";
-			data += String.valueOf(Base64.encode(RSASHA1Verify.encodeSSHRSAPublicKey(
-					(com.trilead.ssh2.signature.RSAPublicKey)convertToTrilead(pk))));
-			return data + " " + nickname;
-		} else if (pk instanceof DSAPublicKey) {
-			String data = "ssh-dss ";
-			data += String.valueOf(Base64.encode(DSASHA1Verify.encodeSSHDSAPublicKey(
-					(com.trilead.ssh2.signature.DSAPublicKey)convertToTrilead(pk))));
-			return data + " " + nickname;
-		}
-
-		throw new InvalidKeyException("Unknown key type");
-	}
+//	public static String convertToOpenSSHFormat(PublicKey pk, String origNickname) throws IOException, InvalidKeyException {
+//		String nickname = origNickname;
+//		if (nickname == null)
+//			nickname = "connectbot@android";
+//
+//		if (pk instanceof RSAPublicKey) {
+//			String data = "ssh-rsa ";
+//			data += String.valueOf(Base64.encode(RSASHA1Verify.encodeSSHRSAPublicKey(
+//					(com.trilead.ssh2.signature.RSAPublicKey)convertToTrilead(pk))));
+//			return data + " " + nickname;
+//		} else if (pk instanceof DSAPublicKey) {
+//			String data = "ssh-dss ";
+//			data += String.valueOf(Base64.encode(DSASHA1Verify.encodeSSHDSAPublicKey(
+//					(com.trilead.ssh2.signature.DSAPublicKey)convertToTrilead(pk))));
+//			return data + " " + nickname;
+//		}
+//
+//		throw new InvalidKeyException("Unknown key type");
+//	}
 
 	/*
 	 * OpenSSH compatibility methods
@@ -276,18 +271,18 @@ public class PubkeyUtils {
 	 * @return OpenSSH-encoded pubkey
 	 */
 	public static byte[] extractOpenSSHPublic(Object trileadKey) {
-		try {
-			if (trileadKey instanceof com.trilead.ssh2.signature.RSAPrivateKey)
-				return RSASHA1Verify.encodeSSHRSAPublicKey(
-						((com.trilead.ssh2.signature.RSAPrivateKey) trileadKey).getPublicKey());
-			else if (trileadKey instanceof com.trilead.ssh2.signature.DSAPrivateKey)
-				return DSASHA1Verify.encodeSSHDSAPublicKey(
-						((com.trilead.ssh2.signature.DSAPrivateKey) trileadKey).getPublicKey());
-			else
-				return null;
-		} catch (IOException e) {
+//		try {
+//			if (trileadKey instanceof com.trilead.ssh2.signature.RSAPrivateKey)
+//				return RSASHA1Verify.encodeSSHRSAPublicKey(
+//						((com.trilead.ssh2.signature.RSAPrivateKey) trileadKey).getPublicKey());
+//			else if (trileadKey instanceof com.trilead.ssh2.signature.DSAPrivateKey)
+//				return DSASHA1Verify.encodeSSHDSAPublicKey(
+//						((com.trilead.ssh2.signature.DSAPrivateKey) trileadKey).getPublicKey());
+//			else
+//				return null;
+//		} catch (IOException e) {
 			return null;
-		}
+//		}
 	}
 
 	public static String exportPEM(PrivateKey key, String secret) throws NoSuchAlgorithmException, InvalidParameterSpecException, NoSuchPaddingException, InvalidKeyException, InvalidAlgorithmParameterException, InvalidKeySpecException, IllegalBlockSizeException, IOException {
@@ -327,7 +322,7 @@ public class PubkeyUtils {
 		}
 
 		int i = sb.length();
-		sb.append(Base64.encode(data));
+//		sb.append(Base64.encode(data));
 		for (i += 63; i < sb.length(); i += 64) {
 			sb.insert(i, "\n");
 		}

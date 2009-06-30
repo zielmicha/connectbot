@@ -21,13 +21,11 @@ package org.connectbot.transport;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
-import java.util.Arrays;
+import java.sql.Connection;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -51,30 +49,11 @@ import android.content.Context;
 import android.net.Uri;
 import android.util.Log;
 
-import com.trilead.ssh2.AuthAgentCallback;
-import com.trilead.ssh2.ChannelCondition;
-import com.trilead.ssh2.Connection;
-import com.trilead.ssh2.ConnectionInfo;
-import com.trilead.ssh2.ConnectionMonitor;
-import com.trilead.ssh2.DynamicPortForwarder;
-import com.trilead.ssh2.InteractiveCallback;
-import com.trilead.ssh2.KnownHosts;
-import com.trilead.ssh2.LocalPortForwarder;
-import com.trilead.ssh2.ServerHostKeyVerifier;
-import com.trilead.ssh2.Session;
-import com.trilead.ssh2.crypto.PEMDecoder;
-import com.trilead.ssh2.signature.DSAPrivateKey;
-import com.trilead.ssh2.signature.DSAPublicKey;
-import com.trilead.ssh2.signature.DSASHA1Verify;
-import com.trilead.ssh2.signature.RSAPrivateKey;
-import com.trilead.ssh2.signature.RSAPublicKey;
-import com.trilead.ssh2.signature.RSASHA1Verify;
-
 /**
  * @author Kenny Root
  *
  */
-public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveCallback, AuthAgentCallback {
+public class SSH extends AbsTransport {
 	public SSH() {
 		super();
 	}
@@ -110,17 +89,11 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 	private boolean pubkeysExhausted = false;
 
 	private Connection connection;
-	private Session session;
-	private ConnectionInfo connectionInfo;
+
 
 	private OutputStream stdin;
 	private InputStream stdout;
 	private InputStream stderr;
-
-	private static final int conditions = ChannelCondition.STDOUT_DATA
-		| ChannelCondition.STDERR_DATA
-		| ChannelCondition.CLOSED
-		| ChannelCondition.EOF;
 
 	private List<PortForwardBean> portForwards = new LinkedList<PortForwardBean>();
 
@@ -133,153 +106,85 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 	private String useAuthAgent = HostDatabase.AUTHAGENT_NO;
 	private String agentLockPassphrase;
 
-	public class HostKeyVerifier implements ServerHostKeyVerifier {
-		public boolean verifyServerHostKey(String hostname, int port,
-				String serverHostKeyAlgorithm, byte[] serverHostKey) throws IOException {
-
-			// read in all known hosts from hostdb
-			KnownHosts hosts = manager.hostdb.getKnownHosts();
-			Boolean result;
-
-			String matchName = String.format("%s:%d", hostname, port);
-
-			String fingerprint = KnownHosts.createHexFingerprint(serverHostKeyAlgorithm, serverHostKey);
-
-			String algorithmName;
-			if ("ssh-rsa".equals(serverHostKeyAlgorithm))
-				algorithmName = "RSA";
-			else if ("ssh-dss".equals(serverHostKeyAlgorithm))
-				algorithmName = "DSA";
-			else
-				algorithmName = serverHostKeyAlgorithm;
-
-			switch(hosts.verifyHostkey(matchName, serverHostKeyAlgorithm, serverHostKey)) {
-			case KnownHosts.HOSTKEY_IS_OK:
-				bridge.outputLine(manager.res.getString(R.string.terminal_sucess, algorithmName, fingerprint));
-				return true;
-
-			case KnownHosts.HOSTKEY_IS_NEW:
-				// prompt user
-				bridge.outputLine(manager.res.getString(R.string.host_authenticity_warning, hostname));
-				bridge.outputLine(manager.res.getString(R.string.host_fingerprint, algorithmName, fingerprint));
-
-				result = bridge.promptHelper.requestBooleanPrompt(null, manager.res.getString(R.string.prompt_continue_connecting));
-				if(result == null) return false;
-				if(result.booleanValue()) {
-					// save this key in known database
-					manager.hostdb.saveKnownHost(hostname, port, serverHostKeyAlgorithm, serverHostKey);
-				}
-				return result.booleanValue();
-
-			case KnownHosts.HOSTKEY_HAS_CHANGED:
-				String header = String.format("@   %s   @",
-						manager.res.getString(R.string.host_verification_failure_warning_header));
-
-				char[] atsigns = new char[header.length()];
-				Arrays.fill(atsigns, '@');
-				String border = new String(atsigns);
-
-				bridge.outputLine(border);
-				bridge.outputLine(manager.res.getString(R.string.host_verification_failure_warning));
-				bridge.outputLine(border);
-
-				bridge.outputLine(String.format(manager.res.getString(R.string.host_fingerprint),
-						algorithmName, fingerprint));
-
-				// Users have no way to delete keys, so we'll prompt them for now.
-				result = bridge.promptHelper.requestBooleanPrompt(null, manager.res.getString(R.string.prompt_continue_connecting));
-				if(result == null) return false;
-				if(result.booleanValue()) {
-					// save this key in known database
-					manager.hostdb.saveKnownHost(hostname, port, serverHostKeyAlgorithm, serverHostKey);
-				}
-				return result.booleanValue();
-
-				default:
-					return false;
-			}
-		}
-
-	}
 
 	private void authenticate() {
-		try {
-			if (connection.authenticateWithNone(host.getUsername())) {
-				finishConnection();
-				return;
-			}
-		} catch(Exception e) {
-			Log.d(TAG, "Host does not support 'none' authentication.");
-		}
+//		try {
+//			if (connection.authenticateWithNone(host.getUsername())) {
+//				finishConnection();
+//				return;
+//			}
+//		} catch(Exception e) {
+//			Log.d(TAG, "Host does not support 'none' authentication.");
+//		}
 
 		bridge.outputLine(manager.res.getString(R.string.terminal_auth));
 
-		try {
-			long pubkeyId = host.getPubkeyId();
-
-			if (!pubkeysExhausted &&
-					pubkeyId != HostDatabase.PUBKEYID_NEVER &&
-					connection.isAuthMethodAvailable(host.getUsername(), AUTH_PUBLICKEY)) {
-
-				// if explicit pubkey defined for this host, then prompt for password as needed
-				// otherwise just try all in-memory keys held in terminalmanager
-
-				if (pubkeyId == HostDatabase.PUBKEYID_ANY) {
-					// try each of the in-memory keys
-					bridge.outputLine(manager.res
-							.getString(R.string.terminal_auth_pubkey_any));
-					for (Entry<String, KeyHolder> entry : manager.loadedKeypairs.entrySet()) {
-						if (entry.getValue().bean.isConfirmUse()
-								&& !promptForPubkeyUse(entry.getKey()))
-							continue;
-
-						if (this.tryPublicKey(host.getUsername(), entry.getKey(),
-								entry.getValue().trileadKey)) {
-							finishConnection();
-							break;
-						}
-					}
-				} else {
-					bridge.outputLine(manager.res.getString(R.string.terminal_auth_pubkey_specific));
-					// use a specific key for this host, as requested
-					PubkeyBean pubkey = manager.pubkeydb.findPubkeyById(pubkeyId);
-
-					if (pubkey == null)
-						bridge.outputLine(manager.res.getString(R.string.terminal_auth_pubkey_invalid));
-					else
-						if (tryPublicKey(pubkey))
-							finishConnection();
-				}
-
-				pubkeysExhausted = true;
-			} else if (connection.isAuthMethodAvailable(host.getUsername(), AUTH_PASSWORD)) {
-				bridge.outputLine(manager.res.getString(R.string.terminal_auth_pass));
-				String password = bridge.getPromptHelper().requestStringPrompt(null,
-						manager.res.getString(R.string.prompt_password));
-				if (password != null
-						&& connection.authenticateWithPassword(host.getUsername(), password)) {
-					finishConnection();
-				} else {
-					bridge.outputLine(manager.res.getString(R.string.terminal_auth_pass_fail));
-				}
-			} else if(connection.isAuthMethodAvailable(host.getUsername(), AUTH_KEYBOARDINTERACTIVE)) {
-				// this auth method will talk with us using InteractiveCallback interface
-				// it blocks until authentication finishes
-				bridge.outputLine(manager.res.getString(R.string.terminal_auth_ki));
-				if(connection.authenticateWithKeyboardInteractive(host.getUsername(), this)) {
-					finishConnection();
-				} else {
-					bridge.outputLine(manager.res.getString(R.string.terminal_auth_ki_fail));
-				}
-			} else {
-				bridge.outputLine(manager.res.getString(R.string.terminal_auth_fail));
-			}
-		} catch (IllegalStateException e) {
-			Log.e(TAG, "Connection went away while we were trying to authenticate", e);
-			return;
-		} catch(Exception e) {
-			Log.e(TAG, "Problem during handleAuthentication()", e);
-		}
+//		try {
+//			long pubkeyId = host.getPubkeyId();
+//
+//			if (!pubkeysExhausted &&
+//					pubkeyId != HostDatabase.PUBKEYID_NEVER &&
+//					connection.isAuthMethodAvailable(host.getUsername(), AUTH_PUBLICKEY)) {
+//
+//				// if explicit pubkey defined for this host, then prompt for password as needed
+//				// otherwise just try all in-memory keys held in terminalmanager
+//
+//				if (pubkeyId == HostDatabase.PUBKEYID_ANY) {
+//					// try each of the in-memory keys
+//					bridge.outputLine(manager.res
+//							.getString(R.string.terminal_auth_pubkey_any));
+//					for (Entry<String, KeyHolder> entry : manager.loadedKeypairs.entrySet()) {
+//						if (entry.getValue().bean.isConfirmUse()
+//								&& !promptForPubkeyUse(entry.getKey()))
+//							continue;
+//
+//						if (this.tryPublicKey(host.getUsername(), entry.getKey(),
+//								entry.getValue().trileadKey)) {
+//							finishConnection();
+//							break;
+//						}
+//					}
+//				} else {
+//					bridge.outputLine(manager.res.getString(R.string.terminal_auth_pubkey_specific));
+//					// use a specific key for this host, as requested
+//					PubkeyBean pubkey = manager.pubkeydb.findPubkeyById(pubkeyId);
+//
+//					if (pubkey == null)
+//						bridge.outputLine(manager.res.getString(R.string.terminal_auth_pubkey_invalid));
+//					else
+//						if (tryPublicKey(pubkey))
+//							finishConnection();
+//				}
+//
+//				pubkeysExhausted = true;
+//			} else if (connection.isAuthMethodAvailable(host.getUsername(), AUTH_PASSWORD)) {
+//				bridge.outputLine(manager.res.getString(R.string.terminal_auth_pass));
+//				String password = bridge.getPromptHelper().requestStringPrompt(null,
+//						manager.res.getString(R.string.prompt_password));
+//				if (password != null
+//						&& connection.authenticateWithPassword(host.getUsername(), password)) {
+//					finishConnection();
+//				} else {
+//					bridge.outputLine(manager.res.getString(R.string.terminal_auth_pass_fail));
+//				}
+//			} else if(connection.isAuthMethodAvailable(host.getUsername(), AUTH_KEYBOARDINTERACTIVE)) {
+//				// this auth method will talk with us using InteractiveCallback interface
+//				// it blocks until authentication finishes
+//				bridge.outputLine(manager.res.getString(R.string.terminal_auth_ki));
+//				if(connection.authenticateWithKeyboardInteractive(host.getUsername(), this)) {
+//					finishConnection();
+//				} else {
+//					bridge.outputLine(manager.res.getString(R.string.terminal_auth_ki_fail));
+//				}
+//			} else {
+//				bridge.outputLine(manager.res.getString(R.string.terminal_auth_fail));
+//			}
+//		} catch (IllegalStateException e) {
+//			Log.e(TAG, "Connection went away while we were trying to authenticate", e);
+//			return;
+//		} catch(Exception e) {
+//			Log.e(TAG, "Problem during handleAuthentication()", e);
+//		}
 	}
 
 	/**
@@ -316,7 +221,7 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 
 			if(PubkeyDatabase.KEY_TYPE_IMPORTED.equals(pubkey.getType())) {
 				// load specific key using pem format
-				trileadKey = PEMDecoder.decode(new String(pubkey.getPrivateKey()).toCharArray(), password);
+//				trileadKey = PEMDecoder.decode(new String(pubkey.getPrivateKey()).toCharArray(), password);
 			} else {
 				// load using internal generated format
 				PrivateKey privKey;
@@ -334,7 +239,7 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 						pubkey.getType());
 
 				// convert key to trilead format
-				trileadKey = PubkeyUtils.convertToTrilead(privKey, pubKey);
+//				trileadKey = PubkeyUtils.convertToTrilead(privKey, pubKey);
 				Log.d(TAG, "Unlocked key " + PubkeyUtils.formatKey(pubKey));
 			}
 
@@ -351,10 +256,11 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 
 	private boolean tryPublicKey(String username, String keyNickname, Object trileadKey) throws IOException {
 		//bridge.outputLine(String.format("Attempting 'publickey' with key '%s' [%s]...", keyNickname, trileadKey.toString()));
-		boolean success = connection.authenticateWithPublicKey(username, trileadKey);
-		if(!success)
-			bridge.outputLine(manager.res.getString(R.string.terminal_auth_pubkey_fail, keyNickname));
-		return success;
+//		boolean success = connection.authenticateWithPublicKey(username, trileadKey);
+//		if(!success)
+//			bridge.outputLine(manager.res.getString(R.string.terminal_auth_pubkey_fail, keyNickname));
+//		return success;
+		return false;
 	}
 
 	/**
@@ -379,40 +285,40 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 			return;
 		}
 
-		try {
-			session = connection.openSession();
-
-			if (!useAuthAgent.equals(HostDatabase.AUTHAGENT_NO))
-				session.requestAuthAgentForwarding(this);
-
-			session.requestPTY(getEmulation(), columns, rows, width, height, null);
-			session.startShell();
-
-			stdin = session.getStdin();
-			stdout = session.getStdout();
-			stderr = session.getStderr();
+//		try {
+//			session = connection.openSession();
+//
+//			if (!useAuthAgent.equals(HostDatabase.AUTHAGENT_NO))
+//				session.requestAuthAgentForwarding(this);
+//
+//			session.requestPTY(getEmulation(), columns, rows, width, height, null);
+//			session.startShell();
+//
+//			stdin = session.getStdin();
+//			stdout = session.getStdout();
+//			stderr = session.getStderr();
 
 			sessionOpen = true;
 
 			bridge.onConnected();
-		} catch (IOException e1) {
-			Log.e(TAG, "Problem while trying to create PTY in finishConnection()", e1);
-		}
+//		} catch (IOException e1) {
+//			Log.e(TAG, "Problem while trying to create PTY in finishConnection()", e1);
+//		}
 
 	}
 
 	@Override
 	public void connect() {
-		connection = new Connection(host.getHostname(), host.getPort());
-		connection.addConnectionMonitor(this);
+//		connection = new Connection(host.getHostname(), host.getPort());
+//		connection.addConnectionMonitor(this);
+//
+//		try {
+//			connection.setCompression(compression);
+//		} catch (IOException e) {
+//			Log.e(TAG, "Could not enable compression!", e);
+//		}
 
-		try {
-			connection.setCompression(compression);
-		} catch (IOException e) {
-			Log.e(TAG, "Could not enable compression!", e);
-		}
-
-		try {
+//		try {
 			/* Uncomment when debugging SSH protocol:
 			DebugLogger logger = new DebugLogger() {
 
@@ -424,46 +330,46 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 			Logger.enabled = true;
 			Logger.logger = logger;
 			*/
-			connectionInfo = connection.connect(new HostKeyVerifier());
-			connected = true;
-
-			if (connectionInfo.clientToServerCryptoAlgorithm
-					.equals(connectionInfo.serverToClientCryptoAlgorithm)
-					&& connectionInfo.clientToServerMACAlgorithm
-							.equals(connectionInfo.serverToClientMACAlgorithm)) {
-				bridge.outputLine(manager.res.getString(R.string.terminal_using_algorithm,
-						connectionInfo.clientToServerCryptoAlgorithm,
-						connectionInfo.clientToServerMACAlgorithm));
-			} else {
-				bridge.outputLine(manager.res.getString(
-						R.string.terminal_using_c2s_algorithm,
-						connectionInfo.clientToServerCryptoAlgorithm,
-						connectionInfo.clientToServerMACAlgorithm));
-
-				bridge.outputLine(manager.res.getString(
-						R.string.terminal_using_s2c_algorithm,
-						connectionInfo.serverToClientCryptoAlgorithm,
-						connectionInfo.serverToClientMACAlgorithm));
-			}
-		} catch (IOException e) {
-			Log.e(TAG, "Problem in SSH connection thread during authentication", e);
-
-			// Display the reason in the text.
-			bridge.outputLine(e.getCause().getMessage());
-
-			onDisconnect();
-			return;
-		}
+//			connectionInfo = connection.connect(new HostKeyVerifier());
+//			connected = true;
+//
+//			if (connectionInfo.clientToServerCryptoAlgorithm
+//					.equals(connectionInfo.serverToClientCryptoAlgorithm)
+//					&& connectionInfo.clientToServerMACAlgorithm
+//							.equals(connectionInfo.serverToClientMACAlgorithm)) {
+//				bridge.outputLine(manager.res.getString(R.string.terminal_using_algorithm,
+//						connectionInfo.clientToServerCryptoAlgorithm,
+//						connectionInfo.clientToServerMACAlgorithm));
+//			} else {
+//				bridge.outputLine(manager.res.getString(
+//						R.string.terminal_using_c2s_algorithm,
+//						connectionInfo.clientToServerCryptoAlgorithm,
+//						connectionInfo.clientToServerMACAlgorithm));
+//
+//				bridge.outputLine(manager.res.getString(
+//						R.string.terminal_using_s2c_algorithm,
+//						connectionInfo.serverToClientCryptoAlgorithm,
+//						connectionInfo.serverToClientMACAlgorithm));
+//			}
+//		} catch (IOException e) {
+//			Log.e(TAG, "Problem in SSH connection thread during authentication", e);
+//
+//			// Display the reason in the text.
+//			bridge.outputLine(e.getCause().getMessage());
+//
+//			onDisconnect();
+//			return;
+//		}
 
 		try {
 			// enter a loop to keep trying until authentication
 			int tries = 0;
-			while (connected && !connection.isAuthenticationComplete() && tries++ < AUTH_TRIES) {
-				authenticate();
-
-				// sleep to make sure we dont kill system
-				Thread.sleep(1000);
-			}
+//			while (connected && !connection.isAuthenticationComplete() && tries++ < AUTH_TRIES) {
+//				authenticate();
+//
+//				// sleep to make sure we dont kill system
+//				Thread.sleep(1000);
+//			}
 		} catch(Exception e) {
 			Log.e(TAG, "Problem in SSH connection thread during authentication", e);
 		}
@@ -471,17 +377,12 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 
 	@Override
 	public void close() {
-		connected = false;
-
-		if (session != null) {
-			session.close();
-			session = null;
-		}
-
-		if (connection != null) {
-			connection.close();
-			connection = null;
-		}
+//		connected = false;
+//
+//		if (session != null)
+//			session.close();
+//		if (connection != null)
+//			connection.close();
 	}
 
 	private void onDisconnect() {
@@ -500,26 +401,26 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 	public int read(byte[] buffer, int start, int len) throws IOException {
 		int bytesRead = 0;
 
-		if (session == null)
-			return 0;
-
-		int newConditions = session.waitForCondition(conditions, 0);
-
-		if ((newConditions & ChannelCondition.STDOUT_DATA) != 0) {
-			bytesRead = stdout.read(buffer, start, len);
-		}
-
-		if ((newConditions & ChannelCondition.STDERR_DATA) != 0) {
-			byte discard[] = new byte[256];
-			while (stderr.available() > 0) {
-				stderr.read(discard);
-			}
-		}
-
-		if ((newConditions & ChannelCondition.EOF) != 0) {
-			onDisconnect();
-			throw new IOException("Remote end closed connection");
-		}
+//		if (session == null)
+//			return 0;
+//
+//		int newConditions = session.waitForCondition(conditions, 0);
+//
+//		if ((newConditions & ChannelCondition.STDOUT_DATA) != 0) {
+//			bytesRead = stdout.read(buffer, start, len);
+//		}
+//
+//		if ((newConditions & ChannelCondition.STDERR_DATA) != 0) {
+//			byte discard[] = new byte[256];
+//			while (stderr.available() > 0) {
+//				stderr.read(discard);
+//			}
+//		}
+//
+//		if ((newConditions & ChannelCondition.EOF) != 0) {
+//			onDisconnect();
+//			throw new IOException("Remote end closed connection");
+//		}
 
 		return bytesRead;
 	}
@@ -602,54 +503,55 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 		if (!authenticated)
 			return false;
 
-		if (HostDatabase.PORTFORWARD_LOCAL.equals(portForward.getType())) {
-			LocalPortForwarder lpf = null;
-			try {
-				lpf = connection.createLocalPortForwarder(
-						new InetSocketAddress(InetAddress.getLocalHost(), portForward.getSourcePort()),
-						portForward.getDestAddr(), portForward.getDestPort());
-			} catch (IOException e) {
-				Log.e(TAG, "Could not create local port forward", e);
-				return false;
-			}
-
-			if (lpf == null) {
-				Log.e(TAG, "returned LocalPortForwarder object is null");
-				return false;
-			}
-
-			portForward.setIdentifier(lpf);
-			portForward.setEnabled(true);
-			return true;
-		} else if (HostDatabase.PORTFORWARD_REMOTE.equals(portForward.getType())) {
-			try {
-				connection.requestRemotePortForwarding("", portForward.getSourcePort(), portForward.getDestAddr(), portForward.getDestPort());
-			} catch (IOException e) {
-				Log.e(TAG, "Could not create remote port forward", e);
-				return false;
-			}
-
-			portForward.setEnabled(false);
-			return true;
-		} else if (HostDatabase.PORTFORWARD_DYNAMIC5.equals(portForward.getType())) {
-			DynamicPortForwarder dpf = null;
-
-			try {
-				dpf = connection.createDynamicPortForwarder(
-						new InetSocketAddress(InetAddress.getLocalHost(), portForward.getSourcePort()));
-			} catch (IOException e) {
-				Log.e(TAG, "Could not create dynamic port forward", e);
-				return false;
-			}
-
-			portForward.setIdentifier(dpf);
-			portForward.setEnabled(true);
-			return true;
-		} else {
-			// Unsupported type
-			Log.e(TAG, String.format("attempt to forward unknown type %s", portForward.getType()));
-			return false;
-		}
+//		if (HostDatabase.PORTFORWARD_LOCAL.equals(portForward.getType())) {
+//			LocalPortForwarder lpf = null;
+//			try {
+//				lpf = connection.createLocalPortForwarder(
+//						new InetSocketAddress(InetAddress.getLocalHost(), portForward.getSourcePort()),
+//						portForward.getDestAddr(), portForward.getDestPort());
+//			} catch (IOException e) {
+//				Log.e(TAG, "Could not create local port forward", e);
+//				return false;
+//			}
+//
+//			if (lpf == null) {
+//				Log.e(TAG, "returned LocalPortForwarder object is null");
+//				return false;
+//			}
+//
+//			portForward.setIdentifier(lpf);
+//			portForward.setEnabled(true);
+//			return true;
+//		} else if (HostDatabase.PORTFORWARD_REMOTE.equals(portForward.getType())) {
+//			try {
+//				connection.requestRemotePortForwarding("", portForward.getSourcePort(), portForward.getDestAddr(), portForward.getDestPort());
+//			} catch (IOException e) {
+//				Log.e(TAG, "Could not create remote port forward", e);
+//				return false;
+//			}
+//
+//			portForward.setEnabled(false);
+//			return true;
+//		} else if (HostDatabase.PORTFORWARD_DYNAMIC5.equals(portForward.getType())) {
+//			DynamicPortForwarder dpf = null;
+//
+//			try {
+//				dpf = connection.createDynamicPortForwarder(
+//						new InetSocketAddress(InetAddress.getLocalHost(), portForward.getSourcePort()));
+//			} catch (IOException e) {
+//				Log.e(TAG, "Could not create dynamic port forward", e);
+//				return false;
+//			}
+//
+//			portForward.setIdentifier(dpf);
+//			portForward.setEnabled(true);
+//			return true;
+//		} else {
+//			// Unsupported type
+//			Log.e(TAG, String.format("attempt to forward unknown type %s", portForward.getType()));
+//			return false;
+//		}
+		return false;
 	}
 
 	@Override
@@ -662,60 +564,60 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 		if (!authenticated)
 			return false;
 
-		if (HostDatabase.PORTFORWARD_LOCAL.equals(portForward.getType())) {
-			LocalPortForwarder lpf = null;
-			lpf = (LocalPortForwarder)portForward.getIdentifier();
-
-			if (!portForward.isEnabled() || lpf == null) {
-				Log.d(TAG, String.format("Could not disable %s; it appears to be not enabled or have no handler", portForward.getNickname()));
-				return false;
-			}
-
-			portForward.setEnabled(false);
-
-			try {
-				lpf.close();
-			} catch (IOException e) {
-				Log.e(TAG, "Could not stop local port forwarder, setting enabled to false", e);
-				return false;
-			}
-
-			return true;
-		} else if (HostDatabase.PORTFORWARD_REMOTE.equals(portForward.getType())) {
-			portForward.setEnabled(false);
-
-			try {
-				connection.cancelRemotePortForwarding(portForward.getSourcePort());
-			} catch (IOException e) {
-				Log.e(TAG, "Could not stop remote port forwarding, setting enabled to false", e);
-				return false;
-			}
-
-			return true;
-		} else if (HostDatabase.PORTFORWARD_DYNAMIC5.equals(portForward.getType())) {
-			DynamicPortForwarder dpf = null;
-			dpf = (DynamicPortForwarder)portForward.getIdentifier();
-
-			if (!portForward.isEnabled() || dpf == null) {
-				Log.d(TAG, String.format("Could not disable %s; it appears to be not enabled or have no handler", portForward.getNickname()));
-				return false;
-			}
-
-			portForward.setEnabled(false);
-
-			try {
-				dpf.close();
-			} catch (IOException e) {
-				Log.e(TAG, "Could not stop dynamic port forwarder, setting enabled to false", e);
-				return false;
-			}
-
-			return true;
-		} else {
+//		if (HostDatabase.PORTFORWARD_LOCAL.equals(portForward.getType())) {
+//			LocalPortForwarder lpf = null;
+//			lpf = (LocalPortForwarder)portForward.getIdentifier();
+//
+//			if (!portForward.isEnabled() || lpf == null) {
+//				Log.d(TAG, String.format("Could not disable %s; it appears to be not enabled or have no handler", portForward.getNickname()));
+//				return false;
+//			}
+//
+//			portForward.setEnabled(false);
+//
+//			try {
+//				lpf.close();
+//			} catch (IOException e) {
+//				Log.e(TAG, "Could not stop local port forwarder, setting enabled to false", e);
+//				return false;
+//			}
+//
+//			return true;
+//		} else if (HostDatabase.PORTFORWARD_REMOTE.equals(portForward.getType())) {
+//			portForward.setEnabled(false);
+//
+//			try {
+//				connection.cancelRemotePortForwarding(portForward.getSourcePort());
+//			} catch (IOException e) {
+//				Log.e(TAG, "Could not stop remote port forwarding, setting enabled to false", e);
+//				return false;
+//			}
+//
+//			return true;
+//		} else if (HostDatabase.PORTFORWARD_DYNAMIC5.equals(portForward.getType())) {
+//			DynamicPortForwarder dpf = null;
+//			dpf = (DynamicPortForwarder)portForward.getIdentifier();
+//
+//			if (!portForward.isEnabled() || dpf == null) {
+//				Log.d(TAG, String.format("Could not disable %s; it appears to be not enabled or have no handler", portForward.getNickname()));
+//				return false;
+//			}
+//
+//			portForward.setEnabled(false);
+//
+//			try {
+//				dpf.close();
+//			} catch (IOException e) {
+//				Log.e(TAG, "Could not stop dynamic port forwarder, setting enabled to false", e);
+//				return false;
+//			}
+//
+//			return true;
+//		} else {
 			// Unsupported type
 			Log.e(TAG, String.format("attempt to forward unknown type %s", portForward.getType()));
 			return false;
-		}
+//		}
 	}
 
 	@Override
@@ -723,13 +625,13 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 		this.columns = columns;
 		this.rows = rows;
 
-		if (sessionOpen) {
-			try {
-				session.resizePTY(columns, rows, width, height);
-			} catch (IOException e) {
-				Log.e(TAG, "Couldn't send resize PTY packet", e);
-			}
-		}
+//		if (sessionOpen) {
+//			try {
+//				session.resizePTY(columns, rows, width, height);
+//			} catch (IOException e) {
+//				Log.e(TAG, "Couldn't send resize PTY packet", e);
+//			}
+//		}
 	}
 
 	@Override
@@ -851,18 +753,18 @@ public class SSH extends AbsTransport implements ConnectionMonitor, InteractiveC
 		for (Entry<String,KeyHolder> entry : manager.loadedKeypairs.entrySet()) {
 			Object trileadKey = entry.getValue().trileadKey;
 
-			try {
-				if (trileadKey instanceof RSAPrivateKey) {
-					RSAPublicKey pubkey = ((RSAPrivateKey) trileadKey).getPublicKey();
-					pubKeys.put(entry.getKey(), RSASHA1Verify.encodeSSHRSAPublicKey(pubkey));
-				} else if (trileadKey instanceof DSAPrivateKey) {
-					DSAPublicKey pubkey = ((DSAPrivateKey) trileadKey).getPublicKey();
-					pubKeys.put(entry.getKey(), DSASHA1Verify.encodeSSHDSAPublicKey(pubkey));
-				} else
-					continue;
-			} catch (IOException e) {
-				continue;
-			}
+//			try {
+//				if (trileadKey instanceof RSAPrivateKey) {
+//					RSAPublicKey pubkey = ((RSAPrivateKey) trileadKey).getPublicKey();
+//					pubKeys.put(entry.getKey(), RSASHA1Verify.encodeSSHRSAPublicKey(pubkey));
+//				} else if (trileadKey instanceof DSAPrivateKey) {
+//					DSAPublicKey pubkey = ((DSAPrivateKey) trileadKey).getPublicKey();
+//					pubKeys.put(entry.getKey(), DSASHA1Verify.encodeSSHDSAPublicKey(pubkey));
+//				} else
+//					continue;
+//			} catch (IOException e) {
+//				continue;
+//			}
 		}
 
 		return pubKeys;

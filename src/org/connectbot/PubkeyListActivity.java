@@ -21,7 +21,6 @@ package org.connectbot;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.security.KeyPair;
@@ -70,10 +69,6 @@ import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.AdapterView.OnItemClickListener;
-
-import com.trilead.ssh2.crypto.Base64;
-import com.trilead.ssh2.crypto.PEMDecoder;
-import com.trilead.ssh2.crypto.PEMStructure;
 
 /**
  * List public keys in database by nickname and describe their properties. Allow users to import,
@@ -262,13 +257,13 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 		Object trileadKey = null;
 		if(PubkeyDatabase.KEY_TYPE_IMPORTED.equals(pubkey.getType())) {
 			// load specific key using pem format
-			try {
-				trileadKey = PEMDecoder.decode(new String(pubkey.getPrivateKey()).toCharArray(), password);
-			} catch(Exception e) {
-				String message = getResources().getString(R.string.pubkey_failed_add, pubkey.getNickname());
-				Log.e(TAG, message, e);
-				Toast.makeText(PubkeyListActivity.this, message, Toast.LENGTH_LONG);
-			}
+//			try {
+//				trileadKey = PEMDecoder.decode(new String(pubkey.getPrivateKey()).toCharArray(), password);
+//			} catch(Exception e) {
+//				String message = getResources().getString(R.string.pubkey_failed_add, pubkey.getNickname());
+//				Log.e(TAG, message, e);
+//				Toast.makeText(PubkeyListActivity.this, message, Toast.LENGTH_LONG);
+//			}
 
 		} else {
 			// load using internal generated format
@@ -285,7 +280,7 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 			}
 
 			// convert key to trilead format
-			trileadKey = PubkeyUtils.convertToTrilead(privKey, pubKey);
+//			trileadKey = PubkeyUtils.convertToTrilead(privKey, pubKey);
 			Log.d(TAG, "Unlocked key " + PubkeyUtils.formatKey(pubKey));
 		}
 
@@ -349,10 +344,10 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 		copyPublicToClipboard.setOnMenuItemClickListener(new OnMenuItemClickListener() {
 			public boolean onMenuItemClick(MenuItem item) {
 				try {
-					PublicKey pk = PubkeyUtils.decodePublic(pubkey.getPublicKey(), pubkey.getType());
-					String openSSHPubkey = PubkeyUtils.convertToOpenSSHFormat(pk, pubkey.getNickname());
-
-					clipboard.setText(openSSHPubkey);
+//					PublicKey pk = PubkeyUtils.decodePublic(pubkey.getPublicKey(), pubkey.getType());
+//					String openSSHPubkey = PubkeyUtils.convertToOpenSSHFormat(pk, pubkey.getNickname());
+//
+//					clipboard.setText(openSSHPubkey);
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -648,13 +643,13 @@ public class PubkeyListActivity extends ListActivity implements EventListener {
 			boolean imported = PubkeyDatabase.KEY_TYPE_IMPORTED.equals(pubkey.getType());
 
 			if (imported) {
-				try {
-					PEMStructure struct = PEMDecoder.parsePEM(new String(pubkey.getPrivateKey()).toCharArray());
-					String type = (struct.pemType == PEMDecoder.PEM_RSA_PRIVATE_KEY) ? "RSA" : "DSA";
-					holder.caption.setText(String.format("%s unknown-bit", type));
-				} catch (IOException e) {
-					Log.e(TAG, "Error decoding IMPORTED public key at " + pubkey.getId(), e);
-				}
+//				try {
+//					PEMStructure struct = PEMDecoder.parsePEM(new String(pubkey.getPrivateKey()).toCharArray());
+//					String type = (struct.pemType == PEMDecoder.PEM_RSA_PRIVATE_KEY) ? "RSA" : "DSA";
+//					holder.caption.setText(String.format("%s unknown-bit", type));
+//				} catch (IOException e) {
+//					Log.e(TAG, "Error decoding IMPORTED public key at " + pubkey.getId(), e);
+//				}
 			} else {
 				try {
 					PublicKey pub = PubkeyUtils.decodePublic(pubkey.getPublicKey(), pubkey.getType());
