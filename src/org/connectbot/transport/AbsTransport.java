@@ -19,6 +19,7 @@
 package org.connectbot.transport;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 
@@ -76,13 +77,28 @@ public abstract class AbsTransport {
 	 * <code>buffer</code> at the start of <code>offset</code> and a maximum of
 	 * <code>length</code> bytes. If the remote host disconnects, throw an
 	 * {@link IOException}.
-	 * @param buffer byte buffer to store read bytes into
+	 * @param buffer {@link ByteBuffer} to store read bytes into
 	 * @param offset where to start writing in the buffer
 	 * @param length maximum number of bytes to read
 	 * @return number of bytes read
 	 * @throws IOException when remote host disconnects
 	 */
 	public abstract int read(byte[] buffer, int offset, int length) throws IOException;
+
+	/**
+	 * Reads from the transport. Transport must support reading into a the byte array
+	 * <code>buffer</code> at the start of <code>offset</code> and a maximum of
+	 * <code>length</code> bytes. If the remote host disconnects, throw an
+	 * {@link IOException}.
+	 * @param buffer byte array to store read bytes into
+	 * @param offset where to start writing in the buffer
+	 * @param length maximum number of bytes to read
+	 * @return number of bytes read
+	 * @throws IOException when remote host disconnects
+	 */
+	public int read(ByteBuffer buffer, int offset, int length) throws IOException {
+		return read(buffer.array(), offset, length);
+	}
 
 	/**
 	 * Writes to the transport. If the host is not yet connected, simply return without

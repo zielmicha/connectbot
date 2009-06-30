@@ -19,13 +19,13 @@
 package org.connectbot.transport;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
-import java.sql.Connection;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -41,6 +41,10 @@ import org.connectbot.bean.PubkeyBean;
 import org.connectbot.service.TerminalBridge;
 import org.connectbot.service.TerminalManager;
 import org.connectbot.service.TerminalManager.KeyHolder;
+import org.connectbot.ssh2.Channel;
+import org.connectbot.ssh2.ConnectionInfo;
+import org.connectbot.ssh2.NativeInputStream;
+import org.connectbot.ssh2.Session;
 import org.connectbot.util.HostDatabase;
 import org.connectbot.util.PubkeyDatabase;
 import org.connectbot.util.PubkeyUtils;
@@ -88,12 +92,12 @@ public class SSH extends AbsTransport {
 
 	private boolean pubkeysExhausted = false;
 
-	private Connection connection;
-
+	private Session connection;
+	private Channel session;
 
 	private OutputStream stdin;
-	private InputStream stdout;
-	private InputStream stderr;
+	private NativeInputStream stdout;
+	private NativeInputStream stderr;
 
 	private List<PortForwardBean> portForwards = new LinkedList<PortForwardBean>();
 
@@ -106,17 +110,7 @@ public class SSH extends AbsTransport {
 	private String useAuthAgent = HostDatabase.AUTHAGENT_NO;
 	private String agentLockPassphrase;
 
-
 	private void authenticate() {
-//		try {
-//			if (connection.authenticateWithNone(host.getUsername())) {
-//				finishConnection();
-//				return;
-//			}
-//		} catch(Exception e) {
-//			Log.d(TAG, "Host does not support 'none' authentication.");
-//		}
-
 		bridge.outputLine(manager.res.getString(R.string.terminal_auth));
 
 //		try {
@@ -158,15 +152,15 @@ public class SSH extends AbsTransport {
 //
 //				pubkeysExhausted = true;
 //			} else if (connection.isAuthMethodAvailable(host.getUsername(), AUTH_PASSWORD)) {
-//				bridge.outputLine(manager.res.getString(R.string.terminal_auth_pass));
-//				String password = bridge.getPromptHelper().requestStringPrompt(null,
-//						manager.res.getString(R.string.prompt_password));
-//				if (password != null
-//						&& connection.authenticateWithPassword(host.getUsername(), password)) {
-//					finishConnection();
-//				} else {
-//					bridge.outputLine(manager.res.getString(R.string.terminal_auth_pass_fail));
-//				}
+				bridge.outputLine(manager.res.getString(R.string.terminal_auth_pass));
+				String password = bridge.getPromptHelper().requestStringPrompt(null,
+						manager.res.getString(R.string.prompt_password));
+				if (password != null
+						&& connection.authenticatePassword(host.getUsername(), password)) {
+					finishConnection();
+				} else {
+					bridge.outputLine(manager.res.getString(R.string.terminal_auth_pass_fail));
+				}
 //			} else if(connection.isAuthMethodAvailable(host.getUsername(), AUTH_KEYBOARDINTERACTIVE)) {
 //				// this auth method will talk with us using InteractiveCallback interface
 //				// it blocks until authentication finishes
@@ -268,6 +262,7 @@ public class SSH extends AbsTransport {
 	 * authentication. If called before authenticated, it will just fail.
 	 */
 	private void finishConnection() {
+		Log.d(TAG, "Authentication complete");
 		authenticated = true;
 
 		for (PortForwardBean portForward : portForwards) {
@@ -284,6 +279,16 @@ public class SSH extends AbsTransport {
 			bridge.onConnected();
 			return;
 		}
+
+		session = connection.openSession();
+
+		session.requestPTY(getEmulation(), columns, rows, width, height);
+		// Set some environment variables here, I presume
+		session.openShell();
+
+		stdin = session.getStdin();
+		stdout = session.getStdout();
+		stderr = session.getStderr();
 
 //		try {
 //			session = connection.openSession();
@@ -309,67 +314,57 @@ public class SSH extends AbsTransport {
 
 	@Override
 	public void connect() {
-//		connection = new Connection(host.getHostname(), host.getPort());
-//		connection.addConnectionMonitor(this);
-//
-//		try {
-//			connection.setCompression(compression);
-//		} catch (IOException e) {
-//			Log.e(TAG, "Could not enable compression!", e);
-//		}
+		connection = new Session(host.getHostname(), host.getPort());
+		try {
+			connection.connect();
+		} catch (UnknownHostException e) {
+			Log.e(TAG, "unknown host", e);
 
-//		try {
-			/* Uncomment when debugging SSH protocol:
-			DebugLogger logger = new DebugLogger() {
+			bridge.outputLine("Unknown host " + host.getHostname());
 
-				public void log(int level, String className, String message) {
-					Log.d("SSH", message);
-				}
+			onDisconnect();
+			return;
+		} catch (IOException e) {
+			Log.e(TAG, "Problem in SSH connection thread during authentication", e);
 
-			};
-			Logger.enabled = true;
-			Logger.logger = logger;
-			*/
-//			connectionInfo = connection.connect(new HostKeyVerifier());
-//			connected = true;
-//
-//			if (connectionInfo.clientToServerCryptoAlgorithm
-//					.equals(connectionInfo.serverToClientCryptoAlgorithm)
-//					&& connectionInfo.clientToServerMACAlgorithm
-//							.equals(connectionInfo.serverToClientMACAlgorithm)) {
-//				bridge.outputLine(manager.res.getString(R.string.terminal_using_algorithm,
-//						connectionInfo.clientToServerCryptoAlgorithm,
-//						connectionInfo.clientToServerMACAlgorithm));
-//			} else {
-//				bridge.outputLine(manager.res.getString(
-//						R.string.terminal_using_c2s_algorithm,
-//						connectionInfo.clientToServerCryptoAlgorithm,
-//						connectionInfo.clientToServerMACAlgorithm));
-//
-//				bridge.outputLine(manager.res.getString(
-//						R.string.terminal_using_s2c_algorithm,
-//						connectionInfo.serverToClientCryptoAlgorithm,
-//						connectionInfo.serverToClientMACAlgorithm));
-//			}
-//		} catch (IOException e) {
-//			Log.e(TAG, "Problem in SSH connection thread during authentication", e);
-//
-//			// Display the reason in the text.
-//			bridge.outputLine(e.getCause().getMessage());
-//
-//			onDisconnect();
-//			return;
-//		}
+			// Display the reason in the text.
+			bridge.outputLine(e.getCause().getMessage());
+
+			onDisconnect();
+			return;
+		}
+
+		connected = true;
+
+		String authMethods = connection.getAuthenticationMethods(host.getUsername());
+		Log.d(TAG, "Auth methods: " + authMethods);
+
+		ConnectionInfo connectionInfo = connection.getConnectionInfo();
+		if (connectionInfo.c2sCrypto.equals(connectionInfo.s2cCrypto)) {
+			bridge.outputLine(manager.res.getString(
+					R.string.terminal_using_algorithm,
+					connectionInfo.c2sCrypto,
+					connectionInfo.c2sMAC));
+		} else {
+			bridge.outputLine(manager.res.getString(
+					R.string.terminal_using_c2s_algorithm,
+					connectionInfo.c2sCrypto,
+					connectionInfo.c2sMAC));
+			bridge.outputLine(manager.res.getString(
+					R.string.terminal_using_s2c_algorithm,
+					connectionInfo.s2cCrypto,
+					connectionInfo.s2cMAC));
+		}
 
 		try {
 			// enter a loop to keep trying until authentication
 			int tries = 0;
-//			while (connected && !connection.isAuthenticationComplete() && tries++ < AUTH_TRIES) {
-//				authenticate();
-//
-//				// sleep to make sure we dont kill system
-//				Thread.sleep(1000);
-//			}
+			while (connected && !authenticated && tries++ < AUTH_TRIES) {
+				authenticate();
+
+				// sleep to make sure we dont kill system
+				Thread.sleep(1000);
+			}
 		} catch(Exception e) {
 			Log.e(TAG, "Problem in SSH connection thread during authentication", e);
 		}
@@ -398,9 +393,13 @@ public class SSH extends AbsTransport {
 	}
 
 	@Override
-	public int read(byte[] buffer, int start, int len) throws IOException {
+	public int read(byte[] buffer, int start, int len) throws IOException { return 0; }
+
+	@Override
+	public int read(ByteBuffer buffer, int start, int len) throws IOException {
 		int bytesRead = 0;
 
+		bytesRead = stdout.read(buffer, start, len);
 //		if (session == null)
 //			return 0;
 //

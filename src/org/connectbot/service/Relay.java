@@ -57,7 +57,6 @@ public class Relay implements Runnable {
 	private ByteBuffer byteBuffer;
 	private CharBuffer charBuffer;
 
-	private byte[] byteArray;
 	private char[] charArray;
 
 	static {
@@ -102,7 +101,7 @@ public class Relay implements Runnable {
 	}
 
 	public void run() {
-		byteBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+		byteBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
 		charBuffer = CharBuffer.allocate(BUFFER_SIZE);
 
 		/* for both JNI and non-JNI method */
@@ -130,8 +129,8 @@ public class Relay implements Runnable {
 			while (true) {
 				charWidth = bridge.charWidth;
 				bytesToRead = byteBuffer.capacity() - byteBuffer.limit();
-				offset = byteBuffer.arrayOffset() + byteBuffer.limit();
-				bytesRead = transport.read(byteArray, offset, bytesToRead);
+				offset = byteBuffer.limit();
+				bytesRead = transport.read(byteBuffer, offset, bytesToRead);
 
 				if (bytesRead > 0) {
 					byteBuffer.limit(byteBuffer.limit() + bytesRead);
