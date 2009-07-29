@@ -106,7 +106,7 @@
 	  Updating is update by the ant task "update-version" in build.xml
 	  Do not translate.
 	-->
-	<string name="msg_version">ConnectBot (working copy)</string>
+	<string name="msg_version">ConnectBot 1.5.4 (r346 2009.06.30)</string>
 
 	<!-- The category title for terminal emulation preferences. -->
 	<string name="pref_emulation_category">Terminal emulation</string>
