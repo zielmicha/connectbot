@@ -33,15 +33,13 @@ import org.connectbot.transport.AbsTransport;
 import org.connectbot.transport.TransportFactory;
 import org.connectbot.util.HostDatabase;
 
-import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Typeface;
-import android.graphics.Bitmap.Config;
 import android.graphics.Paint.FontMetrics;
-import android.text.ClipboardManager;
+import android.graphics.Typeface;
 import android.util.Log;
 import de.mud.terminal.VDUBuffer;
 import de.mud.terminal.VDUDisplay;
@@ -94,11 +92,8 @@ public class TerminalBridge implements VDUDisplay {
 	private int columns;
 	private int rows;
 
-	/* package */ final TerminalKeyListener keyListener;
-
 	private boolean selectingForCopy = false;
 	private final SelectionArea selectionArea;
-	private ClipboardManager clipboard;
 
 	public int charWidth = -1;
 	public int charHeight = -1;
@@ -150,8 +145,6 @@ public class TerminalBridge implements VDUDisplay {
 		fontSizeChangedListeners = new LinkedList<FontSizeChangedListener>();
 
 		transport = null;
-
-		keyListener = new TerminalKeyListener(manager, this, buffer, null);
 	}
 
 	/**
@@ -241,8 +234,6 @@ public class TerminalBridge implements VDUDisplay {
 		buffer.setDisplay(this);
 
 		selectionArea = new SelectionArea();
-
-		keyListener = new TerminalKeyListener(manager, this, buffer, host.getEncoding());
 	}
 
 	public PromptHelper getPromptHelper() {
@@ -307,7 +298,6 @@ public class TerminalBridge implements VDUDisplay {
 	public void setCharset(String encoding) {
 		if (relay != null)
 			relay.setCharset(encoding);
-		keyListener.setCharset(encoding);
 	}
 
 	/**
@@ -542,9 +532,6 @@ public class TerminalBridge implements VDUDisplay {
 		// Something has gone wrong with our layout; we're 0 width or height!
 		if (width <= 0 || height <= 0)
 			return;
-
-		clipboard = (ClipboardManager) parent.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-		keyListener.setClipboardManager(clipboard);
 
 		if (!forcedSize) {
 			// recalculate buffer size
@@ -974,13 +961,6 @@ public class TerminalBridge implements VDUDisplay {
 	}
 
 	/**
-	 * @return
-	 */
-	public TerminalKeyListener getKeyHandler() {
-		return keyListener;
-	}
-
-	/**
 	 *
 	 */
 	public void resetScrollPosition() {
@@ -1001,5 +981,41 @@ public class TerminalBridge implements VDUDisplay {
 	 */
 	public void decreaseFontSize() {
 		setFontSize(fontSize - FONT_SIZE_STEP);
+	}
+
+	/**
+	 * For all special keys like F1, NUM LOCK, etc. Lame hack because the
+	 * terminal emulator is insane.
+	 * @param keyCode Key code for the vt320
+	 * @param modifiers Modifiers from the vt320
+	 */
+	public void sendSpecialKey(int keyCode, int modifiers) {
+		((vt320)buffer).keyPressed(keyCode, ' ', modifiers);
+	}
+
+	/**
+	 * For all normal keys like Enter, etc. Lame hack because the
+	 * terminal emulator is insane.
+	 * @param keyCode Key code for the vt320
+	 */
+	public void sendKey(int keyCode) {
+		((vt320)buffer).keyTyped(keyCode, (char) keyCode, 0);
+	}
+
+	/**
+	 * @param str string to send
+	 */
+	public void sendString(String str) {
+		byte[] bytes = str.getBytes(getCharset());
+		try {
+			transport.write(bytes);
+		} catch (IOException ioe) {
+			Log.i(TAG, "error writing to transport", ioe);
+			try {
+				transport.flush();
+			} catch (IOException ioe2) {
+				dispatchDisconnect(true);
+			}
+		}
 	}
 }

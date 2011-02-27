@@ -48,8 +48,10 @@ import de.mud.terminal.VDUBuffer;
  */
 public class TerminalView extends View implements FontSizeChangedListener {
 
-	private final Context context;
-	public final TerminalBridge bridge;
+	private final Context mContext;
+	public final TerminalBridge mBridge;
+	private final TerminalKeyListener mListener;
+
 	private final Paint paint;
 	private final Paint cursorPaint;
 	private final Paint cursorStrokePaint;
@@ -64,11 +66,13 @@ public class TerminalView extends View implements FontSizeChangedListener {
 	private String lastNotification = null;
 	private volatile boolean notifications = true;
 
-	public TerminalView(Context context, TerminalBridge bridge) {
+	public TerminalView(Context context, TerminalBridge bridge, TerminalKeyListener handler) {
 		super(context);
 
-		this.context = context;
-		this.bridge = bridge;
+		mContext = context;
+		mBridge = bridge;
+		mListener = handler;
+
 		paint = new Paint();
 
 		setLayoutParams(new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.FILL_PARENT));
@@ -112,19 +116,19 @@ public class TerminalView extends View implements FontSizeChangedListener {
 		bridge.addFontSizeChangedListener(this);
 
 		// connect our view up to the bridge
-		setOnKeyListener(bridge.getKeyHandler());
+		setOnKeyListener(handler);
 	}
 
 	public void destroy() {
 		// tell bridge to destroy its bitmap
-		bridge.parentDestroyed();
+		mBridge.parentDestroyed();
 	}
 
 	@Override
 	protected void onSizeChanged(int w, int h, int oldw, int oldh) {
 		super.onSizeChanged(w, h, oldw, oldh);
 
-		bridge.parentChanged(this);
+		mBridge.parentChanged(this);
 
 		scaleCursors();
 	}
@@ -135,25 +139,25 @@ public class TerminalView extends View implements FontSizeChangedListener {
 
 	private void scaleCursors() {
 		// Create a scale matrix to scale our 1x1 representation of the cursor
-		tempDst.set(0.0f, 0.0f, bridge.charWidth, bridge.charHeight);
+		tempDst.set(0.0f, 0.0f, mBridge.charWidth, mBridge.charHeight);
 		scaleMatrix.setRectToRect(tempSrc, tempDst, scaleType);
 	}
 
 	@Override
 	public void onDraw(Canvas canvas) {
-		if(bridge.bitmap != null) {
+		if(mBridge.bitmap != null) {
 			// draw the bitmap
-			bridge.onDraw();
+			mBridge.onDraw();
 
 			// draw the bridge bitmap if it exists
-			canvas.drawBitmap(bridge.bitmap, 0, 0, paint);
+			canvas.drawBitmap(mBridge.bitmap, 0, 0, paint);
 
 			// also draw cursor if visible
-			if (bridge.buffer.isCursorVisible()) {
-				int cursorColumn = bridge.buffer.getCursorColumn();
-				final int cursorRow = bridge.buffer.getCursorRow();
+			if (mBridge.buffer.isCursorVisible()) {
+				int cursorColumn = mBridge.buffer.getCursorColumn();
+				final int cursorRow = mBridge.buffer.getCursorRow();
 
-				final int columns = bridge.buffer.getColumns();
+				final int columns = mBridge.buffer.getColumns();
 
 				if (cursorColumn == columns)
 					cursorColumn = columns - 1;
@@ -161,25 +165,25 @@ public class TerminalView extends View implements FontSizeChangedListener {
 				if (cursorColumn < 0 || cursorRow < 0)
 					return;
 
-				int currentAttribute = bridge.buffer.getAttributes(
+				int currentAttribute = mBridge.buffer.getAttributes(
 						cursorColumn, cursorRow);
 				boolean onWideCharacter = (currentAttribute & VDUBuffer.FULLWIDTH) != 0;
 
-				int x = cursorColumn * bridge.charWidth;
-				int y = (bridge.buffer.getCursorRow()
-						+ bridge.buffer.screenBase - bridge.buffer.windowBase)
-						* bridge.charHeight;
+				int x = cursorColumn * mBridge.charWidth;
+				int y = (mBridge.buffer.getCursorRow()
+						+ mBridge.buffer.screenBase - mBridge.buffer.windowBase)
+						* mBridge.charHeight;
 
 				// Save the current clip and translation
 				canvas.save();
 
 				canvas.translate(x, y);
 				canvas.clipRect(0, 0,
-						bridge.charWidth * (onWideCharacter ? 2 : 1),
-						bridge.charHeight);
+						mBridge.charWidth * (onWideCharacter ? 2 : 1),
+						mBridge.charHeight);
 				canvas.drawPaint(cursorPaint);
 
-				final int deadKey = bridge.getKeyHandler().getDeadKey();
+				final int deadKey = mListener.getDeadKey();
 				if (deadKey != 0) {
 					canvas.drawText(new char[] { (char)deadKey }, 0, 1, 0, 0, cursorStrokePaint);
 				}
@@ -187,7 +191,7 @@ public class TerminalView extends View implements FontSizeChangedListener {
 				// Make sure we scale our decorations to the correct size.
 				canvas.concat(scaleMatrix);
 
-				int metaState = bridge.getKeyHandler().getMetaState();
+				int metaState = mListener.getMetaState();
 
 				if ((metaState & TerminalKeyListener.META_SHIFT_ON) != 0)
 					canvas.drawPath(shiftCursor, cursorStrokePaint);
@@ -209,14 +213,14 @@ public class TerminalView extends View implements FontSizeChangedListener {
 			}
 
 			// draw any highlighted area
-			if (bridge.isSelectingForCopy()) {
-				SelectionArea area = bridge.getSelectionArea();
+			if (mBridge.isSelectingForCopy()) {
+				SelectionArea area = mBridge.getSelectionArea();
 				canvas.save(Canvas.CLIP_SAVE_FLAG);
 				canvas.clipRect(
-					area.getLeft() * bridge.charWidth,
-					area.getTop() * bridge.charHeight,
-					(area.getRight() + 1) * bridge.charWidth,
-					(area.getBottom() + 1) * bridge.charHeight
+					area.getLeft() * mBridge.charWidth,
+					area.getTop() * mBridge.charHeight,
+					(area.getRight() + 1) * mBridge.charWidth,
+					(area.getBottom() + 1) * mBridge.charHeight
 				);
 				canvas.drawPaint(cursorPaint);
 				canvas.restore();
@@ -236,7 +240,7 @@ public class TerminalView extends View implements FontSizeChangedListener {
 			notification.setText(message);
 			notification.show();
 		} else {
-			notification = Toast.makeText(context, message, Toast.LENGTH_SHORT);
+			notification = Toast.makeText(mContext, message, Toast.LENGTH_SHORT);
 			notification.show();
 		}
 
@@ -249,7 +253,7 @@ public class TerminalView extends View implements FontSizeChangedListener {
 	 * @param height
 	 */
 	public void forceSize(int width, int height) {
-		bridge.resizeComputed(width, height, getWidth(), getHeight());
+		mBridge.resizeComputed(width, height, getWidth(), getHeight());
 	}
 
 	/**

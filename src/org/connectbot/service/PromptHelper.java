@@ -29,12 +29,12 @@ import android.os.Message;
  * @author jsharkey
  */
 public class PromptHelper {
-	private final Object tag;
+	private final Object mTag;
 
-	private Handler handler = null;
+	private Handler mHandler = null;
 
-	private Semaphore promptToken;
-	private Semaphore promptResponse;
+	private Semaphore mPromptToken;
+	private Semaphore mPromptResponse;
 
 	public String promptInstructions = null;
 	public String promptHint = null;
@@ -43,13 +43,13 @@ public class PromptHelper {
 	private Object response = null;
 
 	public PromptHelper(Object tag) {
-		this.tag = tag;
+		mTag = tag;
 
 		// Threads must acquire this before they can send a prompt.
-		promptToken = new Semaphore(1);
+		mPromptToken = new Semaphore(1);
 
 		// Responses will release this semaphore.
-		promptResponse = new Semaphore(0);
+		mPromptResponse = new Semaphore(0);
 	}
 
 
@@ -57,7 +57,7 @@ public class PromptHelper {
 	 * Register a user interface handler, if available.
 	 */
 	public void setHandler(Handler handler) {
-		this.handler = handler;
+		mHandler = handler;
 	}
 
 	/**
@@ -69,7 +69,7 @@ public class PromptHelper {
 		promptRequested = null;
 		promptInstructions = null;
 		promptHint = null;
-		promptResponse.release();
+		mPromptResponse.release();
 	}
 
 	/**
@@ -91,7 +91,7 @@ public class PromptHelper {
 	private Object requestPrompt(String instructions, String hint, Object type) throws InterruptedException {
 		Object response = null;
 
-		promptToken.acquire();
+		mPromptToken.acquire();
 
 		try {
 			promptInstructions = instructions;
@@ -99,15 +99,15 @@ public class PromptHelper {
 			promptRequested = type;
 
 			// notify any parent watching for live events
-			if (handler != null)
-				Message.obtain(handler, -1, tag).sendToTarget();
+			if (mHandler != null)
+				Message.obtain(mHandler, -1, mTag).sendToTarget();
 
 			// acquire lock until user passes back value
-			promptResponse.acquire();
+			mPromptResponse.acquire();
 
 			response = popResponse();
 		} finally {
-			promptToken.release();
+			mPromptToken.release();
 		}
 
 		return response;
@@ -147,13 +147,13 @@ public class PromptHelper {
 	 * Cancel an in-progress prompt.
 	 */
 	public void cancelPrompt() {
-		if (!promptToken.tryAcquire()) {
+		if (!mPromptToken.tryAcquire()) {
 			// A thread has the token, so try to interrupt it
 			response = null;
-			promptResponse.release();
+			mPromptResponse.release();
 		} else {
 			// No threads have acquired the token
-			promptToken.release();
+			mPromptToken.release();
 		}
 	}
 }

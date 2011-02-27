@@ -34,34 +34,30 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.Intent.ShortcutIconResource;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
-import android.content.Intent.ShortcutIconResource;
 import android.content.SharedPreferences.Editor;
-import android.content.res.ColorStateList;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
 import android.preference.PreferenceManager;
-import android.util.Log;
 import android.view.ContextMenu;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
 import android.view.MenuItem.OnMenuItemClickListener;
+import android.view.View;
 import android.view.View.OnKeyListener;
 import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ArrayAdapter;
-import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.AdapterView.OnItemClickListener;
 
 import com.nullwire.trace.ExceptionHandler;
 
@@ -314,9 +310,7 @@ public class HostListActivity extends ListActivity {
 		help.setIntent(new Intent(HostListActivity.this, HelpActivity.class));
 
 		return true;
-
 	}
-
 
 	@Override
 	public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
@@ -387,8 +381,11 @@ public class HostListActivity extends ListActivity {
 	}
 
 	/**
-	 * @param text
-	 * @return
+	 * Starts the activity to connect to the currently selected host. This
+	 * should not be called from the UI thread since it accesses the db
+	 * which accesses the disk.
+	 *
+	 * @return true if it successfully started the activity
 	 */
 	private boolean startConsoleActivity() {
 		Uri uri = TransportFactory.getUri((String) transportSpinner
@@ -417,6 +414,11 @@ public class HostListActivity extends ListActivity {
 		return true;
 	}
 
+	/**
+	 * Update the list view with all the hosts we have in our database. This
+	 * should not be called from the UI thread since the database hits the
+	 * disk.
+	 */
 	protected void updateList() {
 		if (prefs.getBoolean(PreferenceConstants.SORT_BY_COLOR, false) != sortedByColor) {
 			Editor edit = prefs.edit();
@@ -424,8 +426,9 @@ public class HostListActivity extends ListActivity {
 			edit.commit();
 		}
 
-		if (hostdb == null)
+		if (hostdb == null) {
 			hostdb = new HostDatabase(this);
+		}
 
 		hosts = hostdb.getHosts(sortedByColor);
 
@@ -439,130 +442,6 @@ public class HostListActivity extends ListActivity {
 
 		HostAdapter adapter = new HostAdapter(this, hosts, bound);
 
-		this.setListAdapter(adapter);
-	}
-
-	class HostAdapter extends ArrayAdapter<HostBean> {
-		private List<HostBean> hosts;
-		private final TerminalManager manager;
-		private final ColorStateList red, green, blue;
-
-		public final static int STATE_UNKNOWN = 1, STATE_CONNECTED = 2, STATE_DISCONNECTED = 3;
-
-		class ViewHolder {
-			public TextView nickname;
-			public TextView caption;
-			public ImageView icon;
-		}
-
-		public HostAdapter(Context context, List<HostBean> hosts, TerminalManager manager) {
-			super(context, R.layout.item_host, hosts);
-
-			this.hosts = hosts;
-			this.manager = manager;
-
-			red = context.getResources().getColorStateList(R.color.red);
-			green = context.getResources().getColorStateList(R.color.green);
-			blue = context.getResources().getColorStateList(R.color.blue);
-		}
-
-		/**
-		 * Check if we're connected to a terminal with the given host.
-		 */
-		private int getConnectedState(HostBean host) {
-			// always disconnected if we dont have backend service
-			if (this.manager == null)
-				return STATE_UNKNOWN;
-
-			if (manager.getConnectedBridge(host) != null)
-				return STATE_CONNECTED;
-
-			if (manager.disconnected.contains(host))
-				return STATE_DISCONNECTED;
-
-			return STATE_UNKNOWN;
-		}
-
-		@Override
-		public View getView(int position, View convertView, ViewGroup parent) {
-			ViewHolder holder;
-
-			if (convertView == null) {
-				convertView = inflater.inflate(R.layout.item_host, null, false);
-
-				holder = new ViewHolder();
-
-				holder.nickname = (TextView)convertView.findViewById(android.R.id.text1);
-				holder.caption = (TextView)convertView.findViewById(android.R.id.text2);
-				holder.icon = (ImageView)convertView.findViewById(android.R.id.icon);
-
-				convertView.setTag(holder);
-			} else
-				holder = (ViewHolder) convertView.getTag();
-
-			HostBean host = hosts.get(position);
-			if (host == null) {
-				// Well, something bad happened. We can't continue.
-				Log.e("HostAdapter", "Host bean is null!");
-
-				holder.nickname.setText("Error during lookup");
-				holder.caption.setText("see 'adb logcat' for more");
-				return convertView;
-			}
-
-			holder.nickname.setText(host.getNickname());
-
-			switch (this.getConnectedState(host)) {
-			case STATE_UNKNOWN:
-				holder.icon.setImageState(new int[] { }, true);
-				break;
-			case STATE_CONNECTED:
-				holder.icon.setImageState(new int[] { android.R.attr.state_checked }, true);
-				break;
-			case STATE_DISCONNECTED:
-				holder.icon.setImageState(new int[] { android.R.attr.state_expanded }, true);
-				break;
-			}
-
-			ColorStateList chosen = null;
-			if (HostDatabase.COLOR_RED.equals(host.getColor()))
-				chosen = this.red;
-			else if (HostDatabase.COLOR_GREEN.equals(host.getColor()))
-				chosen = this.green;
-			else if (HostDatabase.COLOR_BLUE.equals(host.getColor()))
-				chosen = this.blue;
-
-			Context context = convertView.getContext();
-
-			if (chosen != null) {
-				// set color normally if not selected
-				holder.nickname.setTextColor(chosen);
-				holder.caption.setTextColor(chosen);
-			} else {
-				// selected, so revert back to default black text
-				holder.nickname.setTextAppearance(context, android.R.attr.textAppearanceLarge);
-				holder.caption.setTextAppearance(context, android.R.attr.textAppearanceSmall);
-			}
-
-			long now = System.currentTimeMillis() / 1000;
-
-			String nice = context.getString(R.string.bind_never);
-			if (host.getLastConnect() > 0) {
-				int minutes = (int)((now - host.getLastConnect()) / 60);
-				if (minutes >= 60) {
-					int hours = (minutes / 60);
-					if (hours >= 24) {
-						int days = (hours / 24);
-						nice = context.getString(R.string.bind_days, days);
-					} else
-						nice = context.getString(R.string.bind_hours, hours);
-				} else
-					nice = context.getString(R.string.bind_minutes, minutes);
-			}
-
-			holder.caption.setText(nice);
-
-			return convertView;
-		}
+		setListAdapter(adapter);
 	}
 }
