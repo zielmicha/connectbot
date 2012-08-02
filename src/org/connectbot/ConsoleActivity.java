@@ -101,7 +101,7 @@ public class ConsoleActivity extends Activity {
 
 	// determines whether or not menuitem accelerators are bound
 	// otherwise they collide with an external keyboard's CTRL-char
-	private boolean hardKeyboard = false;
+	private boolean hardKeyboard = true;
 
 	protected Uri requested;
 
@@ -270,12 +270,15 @@ public class ConsoleActivity extends Activity {
 	}
 	@Override
 	public void onCreate(Bundle icicle) {
+            //if(true) throw new RuntimeException("spam!!!");
+
 		super.onCreate(icicle);
 		configureStrictMode();
-		hardKeyboard = getResources().getConfiguration().keyboard ==
-				Configuration.KEYBOARD_QWERTY;
+                Log.i(TAG, "keyboard = " + getResources().getConfiguration().keyboard + ", model = " + Build.MODEL);
+		hardKeyboard = false; /*getResources().getConfiguration().keyboard ==
+                                 Configuration.KEYBOARD_QWERTY*/;
 
-		hardKeyboard = hardKeyboard && !Build.MODEL.equals("Transformer TF101");
+		//hardKeyboard = hardKeyboard && !Build.MODEL.equals("Transformer TF101");
 
 		this.setContentView(R.layout.act_console);
 

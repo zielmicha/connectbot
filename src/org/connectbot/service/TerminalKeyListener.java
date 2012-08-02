@@ -1,3 +1,4 @@
+/* -*- mode: java; tab-width: 4; indent-tabs-mode: nil -*- */
 /*
  * ConnectBot: simple, powerful, open-source SSH client for Android
  * Copyright 2010 Kenny Root, Jeffrey Sharkey
@@ -120,8 +121,10 @@ public class TerminalKeyListener implements OnKeyListener, OnSharedPreferenceCha
 			// Ignore all key-up events except for the special keys
 			if (event.getAction() == KeyEvent.ACTION_UP) {
 				// There's nothing here for virtual keyboard users.
-				if (!hardKeyboard || (hardKeyboard && hardKeyboardHidden))
-					return false;
+                if (!hardKeyboard || (hardKeyboard && hardKeyboardHidden)) {
+                    Log.d(TAG, "skipping key event - no hardware keyboard");
+                    return false;
+                }
 
 				// skip keys if we aren't connected yet or have been disconnected
 				if (bridge.isDisconnected() || bridge.transport == null)
@@ -169,6 +172,7 @@ public class TerminalKeyListener implements OnKeyListener, OnSharedPreferenceCha
 			if (bridge.isDisconnected() || bridge.transport == null)
 				return false;
 
+            Log.d(TAG, "before resetScrollPosition");
 			bridge.resetScrollPosition();
 
 			if (keyCode == KeyEvent.KEYCODE_UNKNOWN &&
@@ -189,9 +193,10 @@ public class TerminalKeyListener implements OnKeyListener, OnSharedPreferenceCha
 				curMetaState |= KeyEvent.META_ALT_ON;
 			}
 
+            Log.d(TAG, "before getUnicodeChar");
 			int key = event.getUnicodeChar(curMetaState);
 			// no hard keyboard?  ALT-k should pass through to below
-			if ((orgMetaState & KeyEvent.META_ALT_ON) != 0 &&
+			if ((orgMetaState & (KeyEvent.META_ALT_ON | HC_META_CTRL_ON)) != 0 &&
 					(!hardKeyboard || hardKeyboardHidden)) {
 				key = 0;
 			}
@@ -207,7 +212,7 @@ public class TerminalKeyListener implements OnKeyListener, OnSharedPreferenceCha
 			}
 
 			final boolean printing = (key != 0);
-
+            Log.d(TAG, "before printing " + printing);
 			// otherwise pass through to existing session
 			// print normal keys
 			if (printing) {
@@ -248,13 +253,14 @@ public class TerminalKeyListener implements OnKeyListener, OnSharedPreferenceCha
 
 				return true;
 			}
-
+            Log.d(TAG, "before ctrl+meta");
 			// send ctrl and meta-keys as appropriate
-			if (!hardKeyboard || hardKeyboardHidden) {
+			if (true /*!hardKeyboard || hardKeyboardHidden*/) {
 				int k = event.getUnicodeChar(0);
 				int k0 = k;
 				boolean sendCtrl = false;
 				boolean sendMeta = false;
+                Log.d(TAG, "hardkb, k=" + k + " c=" + keyAsControl(k) + " " + orgMetaState + " meta_alt_on=" + KeyEvent.META_ALT_ON + " ctrl_on=" + HC_META_CTRL_ON);
 				if (k != 0) {
 					if ((orgMetaState & HC_META_CTRL_ON) != 0) {
 						k = keyAsControl(k);
